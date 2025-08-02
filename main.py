@@ -4,6 +4,9 @@ from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 import uvicorn
 import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # Force redeploy
 # Import configuration and database
 try:
@@ -200,59 +203,35 @@ async def debug_env():
     }
 @app.get("/app", response_class=HTMLResponse)
 async def serve_frontend():
-    """Serve a simple frontend interface"""
-    return HTMLResponse(content=f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Lexsy AI Assistant</title>
-        <style>
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-                   max-width: 800px; margin: 50px auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #667eea, #764ba2); 
-                      color: white; padding: 30px; border-radius: 10px; text-align: center; }}
-            .section {{ margin: 30px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }}
-            .status {{ padding: 10px; border-radius: 5px; margin: 10px 0; }}
-            .success {{ background: #d4edda; color: #155724; }}
-            .warning {{ background: #fff3cd; color: #856404; }}
-            .endpoint {{ background: #f8f9fa; padding: 10px; margin: 5px 0; border-radius: 4px; }}
-            .btn {{ background: #667eea; color: white; padding: 10px 20px; 
-                   border: none; border-radius: 5px; text-decoration: none; display: inline-block; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>🤖 Lexsy AI Assistant</h1>
-            <p>Legal Document & Email Analysis Platform</p>
-        </div>
+    """Serve the actual index.html file"""
+    html_file_path = "index.html"
+    
+    if os.path.exists(html_file_path):
+        with open(html_file_path, 'r', encoding='utf-8') as file:
+            html_content = file.read()
+        return HTMLResponse(content=html_content)
+    else:
+        # Fallback to the basic HTML if file not found
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Lexsy AI Assistant</title></head>
+        <body>
+            <h1>Frontend Loading...</h1>
+            <p>The index.html file was not found. Please check the file structure.</p>
+            <a href="/docs">View API Documentation</a>
+        </body>
+        </html>
+        """)
+    
         
-        <div class="section">
-            <h2>🔧 Setup Status</h2>
-            <div class="status success">✅ API Deployed Successfully</div>
-            <div class="status warning">⚠️ Add OPENAI_API_KEY for full AI features</div>
-            <div class="status warning">⚠️ Add Google OAuth for Gmail integration (optional)</div>
-        </div>
-        
-        <div class="section">
-            <h2>📋 API Endpoints</h2>
-            <div class="endpoint"><strong>GET</strong> <a href="/health">/health</a> - Health Check</div>
-            <div class="endpoint"><strong>GET</strong> <a href="/docs">/docs</a> - API Documentation</div>
-            <div class="endpoint"><strong>GET</strong> <a href="/api/status">/api/status</a> - Configuration Status</div>
-            <div class="endpoint"><strong>POST</strong> /api/init-demo - Initialize Demo Data</div>
-        </div>
-        
-        <div class="section">
-            <h2>🚀 Next Steps</h2>
-            <ol>
-                <li>Add <code>OPENAI_API_KEY</code> in Railway Variables</li>
-                <li>Optionally add Google OAuth credentials</li>
-                <li>Test the <a href="/docs" class="btn">API Documentation</a></li>
-                <li>Initialize demo data via API</li>
-            </ol>
-        </div>
-    </body>
-    </html>
-    """, status_code=200)
+@app.get("/", response_class=HTMLResponse)
+async def root_redirect():
+    """Redirect root to the app interface"""
+    return HTMLResponse(content="""
+    <script>window.location.href = '/app';</script>
+    <p>Redirecting to app...</p>
+    """)        
 
 # Error handler
 @app.exception_handler(Exception)
