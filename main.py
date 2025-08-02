@@ -172,6 +172,32 @@ async def initialize_demo():
         }
 
 # Simple frontend placeholder
+@app.get("/debug/env")
+async def debug_env():
+    """Debug environment variables"""
+    import os
+    
+    # Get all environment variables
+    all_vars = dict(os.environ)
+    
+    # Check specific variables
+    openai_key = os.getenv("OPENAI_API_KEY")
+    google_id = os.getenv("GOOGLE_CLIENT_ID") 
+    google_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    
+    return {
+        "openai_api_key_exists": openai_key is not None,
+        "openai_key_length": len(openai_key) if openai_key else 0,
+        "google_client_id_exists": google_id is not None,
+        "google_secret_exists": google_secret is not None,
+        "total_env_vars": len(all_vars),
+        "railway_vars": [k for k in all_vars.keys() if not k.startswith("_") and not k.startswith("PATH")],
+        "debug_info": {
+            "PORT": os.getenv("PORT"),
+            "RAILWAY_ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT"),
+            "PYTHON_VERSION": os.getenv("PYTHON_VERSION")
+        }
+    }
 @app.get("/app", response_class=HTMLResponse)
 async def serve_frontend():
     """Serve a simple frontend interface"""
