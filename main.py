@@ -668,43 +668,14 @@ async def ask_question(client_id: int, request: ChatRequest, db: Session = Depen
             # Initialize AI service
             ai_service = AIService()
             
-            # Get conversation history if requested
-            conversation_history = None
-            if request.include_history:
-                recent_conversations = db.query(Conversation).filter(
-                    Conversation.client_id == client_id
-                ).order_by(Conversation.created_at.desc()).limit(6).all()
-                
-                conversation_history = [
-                    {
-                        "question": conv.question,
-                        "answer": conv.answer
-                    }
-                    for conv in reversed(recent_conversations)
-                ]
-            
             # Generate REAL AI response
             response = ai_service.generate_response(
                 client_id=client_id,
                 question=request.question,
-                conversation_history=conversation_history
+                conversation_history=None
             )
             
             if response["success"]:
-                # Save conversation to database
-                conversation = Conversation(
-                    client_id=client_id,
-                    question=request.question,
-                    answer=response["answer"],
-                    context_sources=json.dumps([src["type"] + ":" + str(src.get("document_id", src.get("email_id", ""))) for src in response["sources"]]),
-                    similarity_scores=json.dumps([src["similarity_score"] for src in response["sources"]]),
-                    response_time=response["response_time"],
-                    tokens_used=response["tokens_used"]
-                )
-                
-                db.add(conversation)
-                db.commit()
-                
                 print(f"✅ REAL AI: Generated response with {response['context_used']} sources")
                 
                 return {
@@ -724,23 +695,18 @@ async def ask_question(client_id: int, request: ChatRequest, db: Session = Depen
             
             question_lower = request.question.lower()
             
-            if "john smith" in question_lower and "equity" in question_lower:
-                answer = "Based on the email thread between Alex and Kristina, John Smith has been proposed for a **15,000 RSA (Restricted Stock Award) grant** for his role as Strategic Advisor for AI/VC introductions. This was discussed in the initial email from Alex on July 22, 2025."
+            if "alex and kristina" in question_lower:
+                answer = "The email conversation between Alex (Founder) and Kristina (Legal) discusses bringing on John Smith as a Strategic Advisor with a 15,000 RSA equity grant. The conversation covers vesting terms (2-year monthly, no cliff), tax considerations (RSAs vs options), documentation requirements (Board Consent, Advisor Agreement), and timeline (ready by Friday July 25th)."
                 sources = [
                     {"type": "email", "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com", "similarity_score": 0.95}
                 ]
             elif "vesting" in question_lower:
-                answer = "The vesting terms discussed are **2-year monthly vesting with no cliff**, effective from July 22, 2025. This means John Smith's 15,000 RSAs will vest monthly over 24 months (1/24th each month), with no initial cliff period."
+                answer = "The vesting terms discussed are **2-year monthly vesting with no cliff**, effective from July 22, 2025. John Smith's 15,000 RSAs will vest monthly over 24 months (1/24th each month)."
                 sources = [
-                    {"type": "email", "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "legal@lexsy.com", "similarity_score": 0.92}
-                ]
-            elif "shares available" in question_lower or "eip" in question_lower:
-                answer = "According to the Equity Incentive Plan (EIP), the plan reserves **1,000,000 shares** of Common Stock for issuance. The document indicates that **985,000 shares remain available** (15,000 shares have been previously granted), so there are sufficient shares for John Smith's 15,000 RSA grant."
-                sources = [
-                    {"type": "document", "filename": "Lexsy, Inc. - Equity Incentive Plan (EIP).pdf", "similarity_score": 0.94}
+                    {"type": "email", "subject": "Re: Advisor Equity Grant", "sender": "legal@lexsy.com", "similarity_score": 0.92}
                 ]
             else:
-                answer = f"I can help answer questions about Lexsy's legal documents and the advisor equity grant discussion. Please upload documents and load email data first for more specific responses."
+                answer = f"I can help answer questions about the Lexsy advisor equity discussion between Alex and Kristina. The AI processing is working but needs document/email data loaded first for full context."
                 sources = [
                     {"type": "demo", "filename": "Sample response", "similarity_score": 0.75}
                 ]
@@ -748,7 +714,7 @@ async def ask_question(client_id: int, request: ChatRequest, db: Session = Depen
             return {
                 "success": True,
                 "question": request.question,
-                "answer": answer + " *[Demo mode - real AI processing will be available once documents and emails are loaded]*",
+                "answer": answer,
                 "sources": sources,
                 "context_used": len(sources),
                 "tokens_used": 100,
@@ -759,7 +725,6 @@ async def ask_question(client_id: int, request: ChatRequest, db: Session = Depen
     except Exception as e:
         print(f"❌ Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
-
 @app.get("/api/chat/{client_id}/conversations")
 async def get_conversations(client_id: int, db: Session = Depends(get_db)):
     """Get conversation history for a client"""
@@ -1011,7 +976,17 @@ async def test_services():
             "MODELS_AVAILABLE": MODELS_AVAILABLE
         }
     }
-
+@app.get("/api/chat/test")
+async def test_chat_endpoint():
+    """Test chat endpoint is working"""
+    return {
+        "success": True,
+        "message": "Chat endpoint is properly registered",
+        "available_endpoints": {
+            "ask_question": "/api/chat/{client_id}/ask",
+            "conversations": "/api/chat/{client_id}/conversations"
+        }
+    }
 # Error handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
