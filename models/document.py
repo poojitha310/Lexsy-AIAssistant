@@ -15,7 +15,7 @@ class Document(Base):
     file_path = Column(String(500))
     extracted_text = Column(Text)
     chunk_ids = Column(Text)  # JSON array of ChromaDB IDs
-    metadata = Column(Text)  # JSON metadata
+    document_metadata = Column(Text)  # JSON metadata
     processing_status = Column(String(50), default="pending")  # pending, processing, completed, failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
