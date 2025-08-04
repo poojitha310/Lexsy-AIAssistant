@@ -683,6 +683,13 @@
                     <div id="gmailStatus" style="display: none; margin-top: 0.5rem; font-size: 0.875rem; color: #059669;">
                         <i class="fas fa-check-circle"></i> Gmail connected
                     </div>
+                    <button class="btn btn-secondary" onclick="startGmailMonitoring()" id="monitorBtn" style="display: none;">
+                        <i class="fas fa-radar"></i>
+                        Start Monitoring
+                    </button>
+                    <div id="monitoringStatus" style="display: none; margin-top: 0.5rem; font-size: 0.875rem; color: #3b82f6;">
+                        <i class="fas fa-satellite-dish"></i> <span id="monitoringText">Monitoring inactive</span>
+                    </div>
                 </div>
 
                 <!-- Quick Actions -->
@@ -1142,7 +1149,8 @@
             try {
                 const response = await fetch(`${API_BASE}/api/documents/list`, {
                     headers: {
-                        'X-User-Email': currentUser.email
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
                     }
                 });
                 const data = await response.json();
@@ -1215,7 +1223,8 @@
             try {
                 const response = await fetch(`${API_BASE}/api/emails/list`, {
                     headers: {
-                        'X-User-Email': currentUser.email
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
                     }
                 });
                 const data = await response.json();
@@ -1277,7 +1286,8 @@
             try {
                 const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`, {
                     headers: {
-                        'X-User-Email': currentUser.email
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
                     }
                 });
                 const data = await response.json();
@@ -1292,7 +1302,8 @@
                             clearInterval(checkClosed);
                             document.getElementById('gmailStatus').style.display = 'block';
                             document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
-                            showAlert('Gmail connected successfully! You can now analyze email threads.', 'success');
+                            document.getElementById('monitorBtn').style.display = 'block';
+                            showAlert('Gmail connected successfully! You can now start monitoring and analyze email threads.', 'success');
                             
                             // Refresh emails tab if active
                             if (document.getElementById('emailsTab').classList.contains('active')) {
@@ -1305,6 +1316,51 @@
                 }
             } catch (error) {
                 showAlert('Gmail connection error. Please try again.', 'error');
+            }
+        }
+
+        async function startGmailMonitoring() {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+
+            try {
+                showAlert('Starting Gmail monitoring...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/emails/start-monitoring`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
+                    },
+                    body: JSON.stringify({
+                        label: "INBOX",
+                        thread_id: "lexsy_thread_001"
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update monitoring status
+                    document.getElementById('monitoringStatus').style.display = 'block';
+                    document.getElementById('monitoringText').textContent = 'Monitoring INBOX - Checking every 5 minutes';
+                    document.getElementById('monitorBtn').innerHTML = '<i class="fas fa-check"></i> Monitoring Active';
+                    document.getElementById('monitorBtn').disabled = true;
+                    
+                    showAlert('✅ Gmail monitoring started! Automatically checking for new messages every 5 minutes.', 'success');
+                    
+                    // Add helpful message to chat
+                    setTimeout(() => {
+                        addMessage('assistant', '📡 Gmail monitoring is now active! I\'m automatically checking your INBOX for new messages every 5 minutes. Any new emails will be processed and available for analysis immediately.');
+                    }, 1000);
+                } else {
+                    showAlert('Failed to start Gmail monitoring. Please try again.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error starting Gmail monitoring. Please try again.', 'error');
             }
         }
 
@@ -1365,7 +1421,8 @@
                 const response = await fetch(`${API_BASE}/api/user/clear-data`, {
                     method: 'POST',
                     headers: {
-                        'X-User-Email': currentUser.email
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
                     }
                 });
                 
@@ -1407,7 +1464,8 @@
                 const response = await fetch(`${API_BASE}/api/documents/${docId}`, {
                     method: 'DELETE',
                     headers: {
-                        'X-User-Email': currentUser.email
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
                     }
                 });
                 
