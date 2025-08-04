@@ -825,14 +825,7 @@
             const uploadZone = document.getElementById('uploadZone');
             const fileInput = document.getElementById('fileInput');
 
-            uploadZone.addEventListener('click', () => {
-                if (!isAuthenticated) {
-                    showAlert('Please sign in first', 'error');
-                    return;
-                }
-                fileInput.click();
-            });
-
+            uploadZone.addEventListener('click', () => fileInput.click());
             uploadZone.addEventListener('dragover', handleDragOver);
             uploadZone.addEventListener('dragleave', handleDragLeave);
             uploadZone.addEventListener('drop', handleFileDrop);
@@ -856,7 +849,6 @@
 
         function handleDragOver(e) {
             e.preventDefault();
-            if (!isAuthenticated) return;
             e.currentTarget.classList.add('dragover');
         }
 
@@ -870,7 +862,7 @@
             e.currentTarget.classList.remove('dragover');
             
             if (!isAuthenticated) {
-                showAlert('Please sign in first', 'error');
+                showAlert('Please sign in first to upload files', 'error');
                 return;
             }
             
@@ -880,7 +872,7 @@
 
         function handleFileSelect(e) {
             if (!isAuthenticated) {
-                showAlert('Please sign in first', 'error');
+                showAlert('Please sign in first to upload files', 'error');
                 return;
             }
             
