@@ -716,7 +716,117 @@ async def get_user_info(user = Depends(get_current_user)):
         "session_active": True,
         "features_available": FULL_FEATURES
     }
+# Add these endpoints to your main.py file
+# Insert them after the health_check endpoint and before the document upload endpoint
 
+# Missing /api/status endpoint
+@app.get("/api/status")
+async def api_status():
+    """API status endpoint"""
+    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+    google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
+    
+    return {
+        "api_version": "1.0.0",
+        "status": "operational",
+        "services": {
+            "database": "SQLite",
+            "vector_store": "ChromaDB",
+            "ai_model": "gpt-4",
+            "embedding_model": "text-embedding-3-small"
+        },
+        "features": {
+            "openai_integration": openai_configured,
+            "gmail_integration": google_configured,
+            "document_upload": True,
+            "multi_client_support": True,
+            "full_features": FULL_FEATURES,
+            "services_available": FULL_FEATURES
+        },
+        "configuration": {
+            "openai_api_key": "✅ Configured" if openai_configured else "❌ Missing",
+            "google_oauth": "✅ Configured" if google_configured else "❌ Missing (Optional)",
+            "environment": "production" if not os.getenv("DEBUG") else "development"
+        },
+        "active_users": len(user_sessions),
+        "timestamp": datetime.now().isoformat()
+    }
+
+# Missing /app endpoint
+@app.get("/app", response_class=HTMLResponse)
+async def serve_app():
+    """Serve the application interface - redirect to root"""
+    # For simplicity, redirect /app to root
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
+
+# Alternative: serve same content as root
+# @app.get("/app", response_class=HTMLResponse)
+# async def serve_app():
+#     """Serve the application interface"""
+#     try:
+#         if os.path.exists("index.html"):
+#             with open("index.html", 'r', encoding='utf-8') as file:
+#                 return HTMLResponse(content=file.read())
+#     except Exception as e:
+#         print(f"Could not load index.html: {e}")
+#     
+#     return HTMLResponse(content="""
+#     <!DOCTYPE html>
+#     <html>
+#     <head><title>AI Legal Assistant</title></head>
+#     <body>
+#         <h1>AI Legal Assistant</h1>
+#         <p>Application is running successfully!</p>
+#         <a href="/">Go to Home</a>
+#     </body>
+#     </html>
+#     """)
+
+# Debug endpoint to list all routes
+@app.get("/debug/routes")
+async def list_routes():
+    """List all available routes for debugging"""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods),
+                "name": getattr(route, 'name', 'unnamed')
+            })
+    return {
+        "total_routes": len(routes),
+        "routes": sorted(routes, key=lambda x: x["path"])
+    }
+
+# Add error handler for 404s (optional but helpful)
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    """Custom 404 handler"""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Not Found",
+            "path": str(request.url.path),
+            "message": f"The requested path '{request.url.path}' was not found",
+            "available_endpoints": [
+                "/",
+                "/health", 
+                "/api/status",
+                "/app",
+                "/api/documents/upload",
+                "/api/documents/list",
+                "/api/chat/ask",
+                "/api/auth/gmail/auth-url",
+                "/api/demo/load-sample"
+            ],
+            "suggestion": "Visit / for the main application or /debug/routes to see all available endpoints"
+        }
+    )
 # Admin endpoint - list active users (for monitoring)
 @app.get("/api/admin/users")
 async def list_active_users():
