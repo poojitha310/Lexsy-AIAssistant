@@ -1,85 +1,31 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
-from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
-from sqlalchemy.orm import Session
 import uvicorn
 import os
-import json
-from datetime import datetime
+from pathlib import Path
 
-# Import configuration and database
-try:
-    from config import settings
-    from database import init_db, get_db
-    FULL_FEATURES = True
-    print("✅ Full features available")
-except ImportError as e:
-    print(f"⚠️ Limited features: {e}")
-    # Fallback for minimal deployment
-    class Settings:
-        APP_NAME = "Lexsy AI Assistant"
-        DEBUG = False
-        DATABASE_URL = "sqlite:///./lexsy.db"
-        UPLOAD_DIR = "./uploads"
-        CHROMADB_PATH = "./chromadb"
-        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-        OPENAI_MODEL = "gpt-4"
-        OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-    settings = Settings()
-    FULL_FEATURES = False
-    
-    def init_db():
-        print("Database initialization skipped - minimal mode")
-    
-    def get_db():
-        yield None
+from config import settings
+from database import init_db
 
-# Import services with fallback
-try:
-    from services.document_service import DocumentService
-    from services.vector_service import VectorService
-    from services.ai_service import AIService
-    from services.gmail_service import GmailService
-    SERVICES_AVAILABLE = True
-    print("✅ All services imported successfully")
-except ImportError as e:
-    print(f"⚠️ Services not available: {e}")
-    SERVICES_AVAILABLE = False
-
-# Import models with fallback
-try:
-    from models.client import Client
-    from models.document import Document
-    from models.email import Email
-    from models.conversation import Conversation
-    MODELS_AVAILABLE = True
-    print("✅ All models imported successfully")
-except ImportError as e:
-    print(f"⚠️ Models not available: {e}")
-    MODELS_AVAILABLE = False
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Starting Lexsy AI Assistant...")
-    print(f"🌍 Environment: {'Development' if getattr(settings, 'DEBUG', False) else 'Production'}")
-    print(f"🔧 Full Features: {FULL_FEATURES}")
-    print(f"🛠️ Services: {SERVICES_AVAILABLE}")
-    print(f"📊 Models: {MODELS_AVAILABLE}")
-    
-    # Create directories
-    os.makedirs(getattr(settings, 'UPLOAD_DIR', './uploads'), exist_ok=True)
-    os.makedirs(getattr(settings, 'CHROMADB_PATH', './chromadb'), exist_ok=True)
+    print(f"📁 Upload directory: {settings.UPLOAD_DIR}")
+    print(f"🗄️ Database: {settings.DATABASE_URL}")
+    print(f"🧠 Vector store: {settings.CHROMADB_PATH}")
     
     # Initialize database
-    try:
-        init_db()
-        print("✅ Database initialized")
-    except Exception as e:
-        print(f"⚠️ Database initialization failed: {e}")
+    init_db()
+    print("✅ Database initialized")
+    
+    # Create upload directory
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(settings.CHROMADB_PATH, exist_ok=True)
+    print("✅ Directories created")
     
     yield
     
@@ -92,39 +38,18 @@ app = FastAPI(
     description="Legal Document & Email Analysis Platform - AI Assistant Panel for Lawyers",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Configure for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Mount static files (if directory exists)
-try:
-    if os.path.exists("static"):
-        app.mount("/static", StaticFiles(directory="static"), name="static")
-        print("✅ Static files mounted")
-except Exception as e:
-    print(f"⚠️ Could not mount static directory: {e}")
-
-# Pydantic models
-class ChatRequest(BaseModel):
-    question: str
-    include_history: bool = True
-
-class ChatResponse(BaseModel):
-    success: bool
-    answer: str
-    sources: list
-    context_used: int
-    tokens_used: int
-    response_time: float
 
 # Health check endpoint
 @app.get("/health")
@@ -133,28 +58,12 @@ async def health_check():
         "status": "healthy",
         "service": "lexsy-ai-assistant",
         "version": "1.0.0",
-        "environment": "production" if not getattr(settings, 'DEBUG', True) else "development",
-        "port": os.getenv("PORT", "8000"),
-        "features": {
-            "full_features": FULL_FEATURES,
-            "services": SERVICES_AVAILABLE,
-            "models": MODELS_AVAILABLE
-        }
+        "environment": "development" if settings.DEBUG else "production"
     }
 
-# Root endpoint - serve the full application
-@app.get("/", response_class=HTMLResponse)
+# Root endpoint - redirect to app
+@app.get("/")
 async def root():
-    """Serve the main application interface"""
-    try:
-        if os.path.exists("index.html"):
-            with open("index.html", 'r', encoding='utf-8') as file:
-                html_content = file.read()
-                print("✅ Serving index.html from root")
-                return HTMLResponse(content=html_content)
-    except Exception as e:
-        print(f"⚠️ Could not load index.html: {e}")
-    
     return HTMLResponse(content="""
     <!DOCTYPE html>
     <html>
@@ -163,8 +72,7 @@ async def root():
         <meta http-equiv="refresh" content="0; url=/app">
     </head>
     <body>
-        <p>Redirecting to application...</p>
-        <script>window.location.href = '/app';</script>
+        <p>Redirecting to <a href="/app">Lexsy AI Assistant</a>...</p>
     </body>
     </html>
     """)
@@ -173,836 +81,829 @@ async def root():
 @app.get("/api/status")
 async def api_status():
     """Get API status and configuration"""
-    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
-    google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
-    
     return {
         "api_version": "1.0.0",
         "services": {
-            "database": "SQLite",
+            "database": "SQLite" if "sqlite" in settings.DATABASE_URL else "PostgreSQL",
             "vector_store": "ChromaDB",
-            "ai_model": "gpt-4",
-            "embedding_model": "text-embedding-3-small"
+            "ai_model": settings.OPENAI_MODEL,
+            "embedding_model": settings.OPENAI_EMBEDDING_MODEL
         },
         "features": {
-            "openai_integration": openai_configured,
-            "gmail_integration": google_configured,
+            "gmail_integration": bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET),
+            "openai_integration": bool(settings.OPENAI_API_KEY),
             "document_upload": True,
-            "multi_client_support": True,
-            "full_features": FULL_FEATURES,
-            "services_available": SERVICES_AVAILABLE
+            "multi_client_support": True
         },
-        "configuration": {
-            "openai_api_key": "✅ Configured" if openai_configured else "❌ Missing",
-            "google_oauth": "✅ Configured" if google_configured else "❌ Missing (Optional)",
-            "environment": "production" if not getattr(settings, 'DEBUG', True) else "development"
+        "limits": {
+            "max_file_size_mb": settings.MAX_FILE_SIZE / (1024 * 1024),
+            "upload_directory": settings.UPLOAD_DIR
         }
     }
-# Demo initialization
-@app.post("/api/init-demo")
-async def initialize_demo():
-    """Initialize demo data with REAL processing"""
-    try:
-        if FULL_FEATURES and SERVICES_AVAILABLE and MODELS_AVAILABLE:
-            # Real initialization
-            db = next(get_db())
-            
-            # Create sample clients if they don't exist
-            client_1 = db.query(Client).filter(Client.email == "legal@lexsy.com").first()
-            if not client_1:
-                client_1 = Client(
-                    name="Lexsy, Inc.",
-                    email="legal@lexsy.com",
-                    company="Lexsy, Inc.",
-                    description="AI-powered legal technology startup"
-                )
-                db.add(client_1)
-                db.commit()
-                db.refresh(client_1)
-            
-            client_2 = db.query(Client).filter(Client.email == "counsel@techcorp.com").first()
-            if not client_2:
-                client_2 = Client(
-                    name="TechCorp LLC",
-                    email="counsel@techcorp.com", 
-                    company="TechCorp LLC",
-                    description="Enterprise software company"
-                )
-                db.add(client_2)
-                db.commit()
-                db.refresh(client_2)
-            
-            print("✅ REAL: Demo clients initialized")
-            
-            return {
-                "success": True,
-                "message": "REAL demo data initialized with database",
-                "data": {
-                    "clients": [
-                        {"id": client_1.id, "name": client_1.name, "email": client_1.email},
-                        {"id": client_2.id, "name": client_2.name, "email": client_2.email}
-                    ]
-                }
-            }
-        else:
-            # Fallback demo
-            return {
-                "success": True,
-                "message": "Demo data initialized (basic mode)",
-                "data": {
-                    "clients": [
-                        {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
-                        {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
-                    ]
-                }
-            }
-    except Exception as e:
-        print(f"❌ Demo initialization error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Demo initialization failed"
-        }
 
-# Client endpoints
-@app.get("/api/clients/")
-async def list_clients(db: Session = Depends(get_db)):
-    """Get all clients with REAL database"""
-    try:
-        if MODELS_AVAILABLE and db:
-            clients = db.query(Client).filter(Client.is_active == True).all()
-            return [client.to_dict() for client in clients]
-        else:
-            # Fallback
-            return [
-                {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com", "is_active": True},
-                {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com", "is_active": True}
-            ]
-    except Exception as e:
-        print(f"❌ Client list error: {e}")
-        return [
-            {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com", "is_active": True},
-            {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com", "is_active": True}
-        ]
+# Import and include API routers
+from api import auth, documents, clients, emails, chat
 
-@app.get("/api/clients/{client_id}")
-async def get_client(client_id: int, db: Session = Depends(get_db)):
-    """Get a specific client"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
-            if client:
-                return client.to_dict()
-            else:
-                raise HTTPException(status_code=404, detail="Client not found")
-        else:
-            # Fallback
-            clients = {
-                1: {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
-                2: {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
-            }
-            if client_id in clients:
-                return clients[client_id]
-            else:
-                raise HTTPException(status_code=404, detail="Client not found")
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get client error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(clients.router, prefix="/api/clients", tags=["Clients"])
+app.include_router(documents.router, prefix="/api/documents", tags=["Documents"])
+app.include_router(emails.router, prefix="/api/emails", tags=["Emails"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
-@app.get("/api/clients/{client_id}/stats")
-async def get_client_stats(client_id: int, db: Session = Depends(get_db)):
-    """Get statistics for a client with REAL data"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            # Get real stats
-            documents_count = len(client.documents)
-            emails_count = len(client.emails)
-            conversations_count = len(client.conversations)
-            
-            # Get vector store stats if available
-            vector_stats = {"total_chunks": 0, "documents": 0, "emails": 0}
-            if SERVICES_AVAILABLE:
-                try:
-                    vector_service = VectorService()
-                    vector_stats = vector_service.get_client_content_stats(client_id)
-                except:
-                    pass
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "documents_uploaded": documents_count,
-                "emails_ingested": emails_count,
-                "conversations": conversations_count,
-                "vector_store": vector_stats
-            }
-        else:
-            # Fallback stats
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "documents_uploaded": 3 if client_id == 1 else 0,
-                "emails_ingested": 5 if client_id == 1 else 0,
-                "conversations": 0,
-                "vector_store": {"total_chunks": 15 if client_id == 1 else 0}
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Client stats error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-# Document endpoints with REAL processing
-@app.post("/api/documents/{client_id}/upload-sample-documents")
-async def upload_sample_docs(client_id: int, db: Session = Depends(get_db)):
-    """Upload sample documents with REAL processing"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            print(f"✅ REAL: Processing sample documents for client {client_id}")
-            
-            # Initialize services
-            doc_service = DocumentService()
-            vector_service = VectorService()
-            
-            # Get sample documents
-            sample_docs = doc_service.get_sample_documents()
-            processed_docs = []
-            
-            for sample_doc in sample_docs:
-                # Check if document already exists
-                existing_doc = db.query(Document).filter(
-                    Document.client_id == client_id,
-                    Document.original_filename == sample_doc["original_filename"]
-                ).first()
-                
-                if existing_doc:
-                    processed_docs.append(existing_doc.to_dict())
-                    continue
-                
-                # Create document record
-                document = Document(
-                    client_id=client_id,
-                    filename=sample_doc["filename"],
-                    original_filename=sample_doc["original_filename"],
-                    file_type=sample_doc["file_type"],
-                    file_size=len(sample_doc["content"]),
-                    extracted_text=sample_doc["content"],
-                    processing_status="completed"
-                )
-                
-                db.add(document)
-                db.commit()
-                db.refresh(document)
-                
-                # Add to vector store
-                chunk_ids = vector_service.add_document_to_vector_store(
-                    client_id=client_id,
-                    document_id=document.id,
-                    text=sample_doc["content"],
-                    metadata={
-                        "filename": document.original_filename,
-                        "file_type": document.file_type,
-                        "created_at": document.created_at.isoformat(),
-                        "sample_document": True
-                    }
-                )
-                
-                if chunk_ids:
-                    document.chunk_ids = json.dumps(chunk_ids)
-                    db.commit()
-                
-                processed_docs.append(document.to_dict())
-            
-            print(f"✅ REAL: Processed {len(processed_docs)} documents into vector store")
-            
-            return {
-                "success": True,
-                "message": f"REAL: Processed {len(processed_docs)} documents with vector embeddings",
-                "documents": processed_docs
-            }
-        else:
-            # Fallback mock response
-            print(f"⚠️ MOCK: Sample documents for client {client_id}")
-            return {
-                "success": True,
-                "message": f"Uploaded 3 sample documents for client {client_id} (demo mode)",
-                "documents": [
-                    {"id": 1, "original_filename": "Board Approval - Equity Incentive Plan.pdf", "processing_status": "completed"},
-                    {"id": 2, "original_filename": "Advisor Agreement Template.docx", "processing_status": "completed"},
-                    {"id": 3, "original_filename": "Equity Incentive Plan (EIP).pdf", "processing_status": "completed"}
-                ]
-            }
-    except Exception as e:
-        print(f"❌ Document upload error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Document upload failed"
-        }
+# Serve static files for frontend
+static_dir = Path("static")
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/api/documents/{client_id}/documents")
-async def get_documents(client_id: int, db: Session = Depends(get_db)):
-    """Get all documents for a client with REAL data"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            documents = db.query(Document).filter(Document.client_id == client_id).all()
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "total_documents": len(documents),
-                "documents": [doc.to_dict() for doc in documents]
-            }
-        else:
-            # Fallback
-            if client_id == 1:
-                documents = [
-                    {"id": 1, "original_filename": "Board Approval - Equity Incentive Plan.pdf", "processing_status": "completed"},
-                    {"id": 2, "original_filename": "Advisor Agreement Template.docx", "processing_status": "completed"},
-                    {"id": 3, "original_filename": "Equity Incentive Plan (EIP).pdf", "processing_status": "completed"}
-                ]
-            else:
-                documents = []
-            
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "total_documents": len(documents),
-                "documents": documents
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get documents error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/documents/{client_id}/upload")
-async def upload_document(client_id: int, db: Session = Depends(get_db)):
-    """Upload document endpoint"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            # Real file upload would be implemented here
-            # For now, suggest using sample documents
-            return {
-                "success": True,
-                "message": "File upload feature ready - use 'Load Lexsy Documents' for demo",
-                "note": "Real file upload requires multipart form data handling"
-            }
-        else:
-            return {
-                "success": True,
-                "message": "Document upload feature ready - use sample documents for demo",
-                "note": "Full file upload available in complete version"
-            }
-    except Exception as e:
-        print(f"❌ Upload error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Upload failed"
-        }
-# Email endpoints with REAL processing
-@app.post("/api/emails/{client_id}/ingest-sample-emails")
-async def ingest_sample_emails(client_id: int, db: Session = Depends(get_db)):
-    """Ingest sample emails with REAL processing"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            print(f"✅ REAL: Processing sample emails for client {client_id}")
-            
-            # Initialize services
-            gmail_service = GmailService()
-            vector_service = VectorService()
-            
-            # Get sample emails
-            sample_emails = gmail_service.get_lexsy_sample_emails()
-            processed_emails = []
-            
-            for email_data in sample_emails:
-                # Check if email already exists
-                existing_email = db.query(Email).filter(
-                    Email.gmail_message_id == email_data["id"],
-                    Email.client_id == client_id
-                ).first()
-                
-                if existing_email:
-                    processed_emails.append(existing_email.to_dict())
-                    continue
-                
-                # Parse date
-                date_sent = None
-                if email_data.get("date"):
-                    try:
-                        date_sent = datetime.fromisoformat(email_data["date"].replace("Z", "+00:00"))
-                    except:
-                        pass
-                
-                # Create email record
-                email = Email(
-                    client_id=client_id,
-                    gmail_message_id=email_data["id"],
-                    gmail_thread_id=email_data["thread_id"],
-                    subject=email_data["subject"],
-                    sender=email_data["sender"],
-                    recipient=email_data["recipient"],
-                    body=email_data["body"],
-                    snippet=email_data["snippet"],
-                    date_sent=date_sent,
-                    labels=json.dumps([]),
-                    is_processed=False
-                )
-                
-                db.add(email)
-                db.commit()
-                db.refresh(email)
-                
-                # Add to vector store
-                email_content = f"Subject: {email_data['subject']}\nFrom: {email_data['sender']}\nTo: {email_data['recipient']}\n\n{email_data['body']}"
-                
-                chunk_ids = vector_service.add_email_to_vector_store(
-                    client_id=client_id,
-                    email_id=email.id,
-                    email_content=email_content,
-                    metadata={
-                        "subject": email_data["subject"],
-                        "sender": email_data["sender"],
-                        "recipient": email_data["recipient"],
-                        "thread_id": email_data["thread_id"],
-                        "sample_email": True
-                    }
-                )
-                
-                if chunk_ids:
-                    email.chunk_ids = json.dumps(chunk_ids)
-                    email.is_processed = True
-                    db.commit()
-                
-                processed_emails.append(email.to_dict())
-            
-            print(f"✅ REAL: Processed {len(processed_emails)} emails into vector store")
-            
-            return {
-                "success": True,
-                "message": f"REAL: Processed {len(processed_emails)} emails with vector embeddings",
-                "emails_processed": len(processed_emails),
-                "emails": processed_emails
-            }
-        else:
-            # Fallback
-            print(f"⚠️ MOCK: Sample emails for client {client_id}")
-            return {
-                "success": True,
-                "message": f"Processed 5 sample emails for client {client_id} (demo mode)",
-                "emails_processed": 5
-            }
-    except Exception as e:
-        print(f"❌ Email ingestion error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Email ingestion failed"
-        }
-
-@app.get("/api/emails/{client_id}/emails")
-async def get_emails(client_id: int, db: Session = Depends(get_db)):
-    """Get emails for a client with REAL data"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            emails = db.query(Email).filter(Email.client_id == client_id).order_by(Email.date_sent.asc()).all()
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "total_emails": len(emails),
-                "emails": [email.to_dict() for email in emails]
-            }
-        else:
-            # Fallback
-            if client_id == 1:
-                emails = [
-                    {"id": 1, "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com"},
-                    {"id": 2, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "legal@lexsy.com"},
-                    {"id": 3, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com"},
-                    {"id": 4, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "legal@lexsy.com"},
-                    {"id": 5, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com"}
-                ]
-            else:
-                emails = []
-            
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "total_emails": len(emails),
-                "emails": emails
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get emails error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-# Chat endpoints with REAL AI
-@app.post("/api/chat/{client_id}/ask")
-async def ask_question(client_id: int, request: ChatRequest, db: Session = Depends(get_db)):
-    """Ask a question with REAL AI processing"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            print(f"✅ REAL AI: Processing question for client {client_id}: {request.question}")
-            
-            # Check client exists
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            # Initialize AI service
-            ai_service = AIService()
-            
-            # Generate REAL AI response
-            response = ai_service.generate_response(
-                client_id=client_id,
-                question=request.question,
-                conversation_history=None
-            )
-            
-            if response["success"]:
-                print(f"✅ REAL AI: Generated response with {response['context_used']} sources")
-                
-                return {
-                    "success": True,
-                    "question": request.question,
-                    "answer": response["answer"],
-                    "sources": response["sources"],
-                    "context_used": response["context_used"],
-                    "tokens_used": response["tokens_used"],
-                    "response_time": response["response_time"]
-                }
-            else:
-                raise Exception(response.get("error", "AI processing failed"))
-        else:
-            # Fallback mock responses
-            print(f"⚠️ MOCK AI: Question for client {client_id}: {request.question}")
-            
-            question_lower = request.question.lower()
-            
-            if "alex and kristina" in question_lower:
-                answer = "The email conversation between Alex (Founder) and Kristina (Legal) discusses bringing on John Smith as a Strategic Advisor with a 15,000 RSA equity grant. The conversation covers vesting terms (2-year monthly, no cliff), tax considerations (RSAs vs options), documentation requirements (Board Consent, Advisor Agreement), and timeline (ready by Friday July 25th)."
-                sources = [
-                    {"type": "email", "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com", "similarity_score": 0.95}
-                ]
-            elif "vesting" in question_lower:
-                answer = "The vesting terms discussed are **2-year monthly vesting with no cliff**, effective from July 22, 2025. John Smith's 15,000 RSAs will vest monthly over 24 months (1/24th each month)."
-                sources = [
-                    {"type": "email", "subject": "Re: Advisor Equity Grant", "sender": "legal@lexsy.com", "similarity_score": 0.92}
-                ]
-            else:
-                answer = f"I can help answer questions about the Lexsy advisor equity discussion between Alex and Kristina. The AI processing is working but needs document/email data loaded first for full context."
-                sources = [
-                    {"type": "demo", "filename": "Sample response", "similarity_score": 0.75}
-                ]
-            
-            return {
-                "success": True,
-                "question": request.question,
-                "answer": answer,
-                "sources": sources,
-                "context_used": len(sources),
-                "tokens_used": 100,
-                "response_time": 0.5
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Chat error: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
-@app.get("/api/chat/{client_id}/conversations")
-async def get_conversations(client_id: int, db: Session = Depends(get_db)):
-    """Get conversation history for a client"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            conversations = db.query(Conversation).filter(
-                Conversation.client_id == client_id
-            ).order_by(Conversation.created_at.desc()).limit(50).all()
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "total_conversations": len(conversations),
-                "conversations": [conv.to_dict() for conv in conversations]
-            }
-        else:
-            # Fallback
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "total_conversations": 0,
-                "conversations": []
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get conversations error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-# Gmail auth endpoints
-@app.get("/api/auth/gmail/auth-url")
-async def get_gmail_auth_url():
-    """Get Gmail OAuth authorization URL"""
-    try:
-        if SERVICES_AVAILABLE:
-            gmail_service = GmailService()
-            auth_url = gmail_service.get_auth_url()
-            return {
-                "success": True,
-                "auth_url": auth_url,
-                "message": "Redirect user to this URL for Gmail authentication"
-            }
-        else:
-            # Fallback demo URL
-            return {
-                "success": True,
-                "auth_url": "https://accounts.google.com/o/oauth2/auth?client_id=demo&redirect_uri=callback&scope=gmail.readonly",
-                "message": "Gmail OAuth integration configured - demo URL (add real credentials for production)"
-            }
-    except Exception as e:
-        print(f"❌ Gmail auth URL error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Failed to generate Gmail auth URL"
-        }
-
-@app.get("/api/auth/gmail/callback")
-async def gmail_oauth_callback(code: str, state: str = None, error: str = None):
-    """Handle Gmail OAuth callback"""
-    try:
-        if error:
-            raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
-        
-        if not code:
-            raise HTTPException(status_code=400, detail="Authorization code is required")
-        
-        if SERVICES_AVAILABLE:
-            gmail_service = GmailService()
-            result = gmail_service.authenticate_with_code(code)
-            
-            if result.get("success"):
-                return {
-                    "success": True,
-                    "message": "Gmail authentication successful",
-                    "user_email": result.get("email"),
-                    "messages_total": result.get("messages_total", 0)
-                }
-            else:
-                raise HTTPException(status_code=400, detail=result.get("error", "Authentication failed"))
-        else:
-            # Fallback
-            return {
-                "success": True,
-                "message": "Gmail authentication successful (demo mode)",
-                "user_email": "demo@lexsy.com"
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Gmail callback error: {e}")
-        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
-
-@app.get("/api/auth/gmail/status")
-async def get_gmail_status():
-    """Check Gmail authentication status"""
-    try:
-        if SERVICES_AVAILABLE:
-            gmail_service = GmailService()
-            if gmail_service.service is None:
-                return {
-                    "authenticated": False,
-                    "message": "Gmail not authenticated"
-                }
-            
-            # Test connection
-            profile = gmail_service.service.users().getProfile(userId='me').execute()
-            
-            return {
-                "authenticated": True,
-                "email": profile.get('emailAddress'),
-                "messages_total": profile.get('messagesTotal', 0)
-            }
-        else:
-            # Fallback
-            return {
-                "authenticated": True,
-                "email": "demo@lexsy.com",
-                "message": "Gmail integration ready (demo mode)"
-            }
-    except Exception as e:
-        print(f"❌ Gmail status error: {e}")
-        return {
-            "authenticated": False,
-            "error": str(e)
-        }
-
-# App interface endpoint  
+# Serve the frontend application
 @app.get("/app", response_class=HTMLResponse)
 async def serve_frontend():
-    """Serve the full application interface"""
-    try:
-        # Try to load the actual index.html file first
-        if os.path.exists("index.html"):
-            with open("index.html", 'r', encoding='utf-8') as file:
-                html_content = file.read()
-                print("✅ Serving index.html from /app")
-                return HTMLResponse(content=html_content)
-    except Exception as e:
-        print(f"⚠️ Could not load index.html: {e}")
-    
-    # Fallback to redirect to root
-    return HTMLResponse(content="""
-    <script>window.location.href = '/';</script>
-    <p>Redirecting to main interface...</p>
-    """)
+    """Serve the frontend application"""
+    # Use the embedded HTML for the main app
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lexsy AI Assistant - Legal Document & Email Analysis</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .lexsy-blue {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        }
+        
+        .chat-message {
+            max-width: 80%;
+            margin-bottom: 1rem;
+        }
+        
+        .user-message {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            margin-left: auto;
+            border-radius: 18px 18px 4px 18px;
+        }
+        
+        .ai-message {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px 18px 18px 4px;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 16px;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #94a3b8;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+        
+        .file-drop-zone {
+            border: 2px dashed #d1d5db;
+            border-radius: 12px;
+            background: #f9fafb;
+            transition: all 0.3s ease;
+        }
+        
+        .file-drop-zone.dragover {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+        
+        .source-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #475569;
+            margin: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="lexsy-blue text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                        <i class="fas fa-scale-balanced text-blue-600 text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">Lexsy AI Assistant</h1>
+                        <p class="text-blue-100 text-sm">Legal Document & Email Analysis Platform</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div id="gmail-status" class="hidden items-center space-x-2">
+                        <i class="fas fa-envelope text-green-300"></i>
+                        <span class="text-sm">Gmail Connected</span>
+                    </div>
+                    <button id="gmail-auth-btn" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-gray-100 transition-colors">
+                        <i class="fab fa-google mr-2"></i>Connect Gmail
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
 
-# Debug environment
-@app.get("/debug/env")
-async def debug_env():
-    """Debug environment variables"""
-    
-    # Get all environment variables
-    all_vars = dict(os.environ)
-    
-    # Check specific variables
-    openai_key = os.getenv("OPENAI_API_KEY")
-    google_id = os.getenv("GOOGLE_CLIENT_ID") 
-    google_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    
-    return {
-        "openai_api_key_exists": openai_key is not None,
-        "openai_key_length": len(openai_key) if openai_key else 0,
-        "google_client_id_exists": google_id is not None,
-        "google_secret_exists": google_secret is not None,
-        "total_env_vars": len(all_vars),
-        "railway_vars": [k for k in all_vars.keys() if not k.startswith("_") and not k.startswith("PATH")],
-        "debug_info": {
-            "PORT": os.getenv("PORT"),
-            "RAILWAY_ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT"),
-            "PYTHON_VERSION": os.getenv("PYTHON_VERSION")
-        },
-        "feature_flags": {
-            "FULL_FEATURES": FULL_FEATURES,
-            "SERVICES_AVAILABLE": SERVICES_AVAILABLE,
-            "MODELS_AVAILABLE": MODELS_AVAILABLE
-        }
-    }
+    <div class="container mx-auto px-6 py-8">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <!-- Sidebar -->
+            <div class="lg:col-span-1">
+                <!-- Client Selector -->
+                <div class="glass-card rounded-xl p-6 shadow-lg mb-6">
+                    <h3 class="font-semibold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-users text-blue-600 mr-2"></i>
+                        Select Client
+                    </h3>
+                    <select id="client-selector" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">Loading clients...</option>
+                    </select>
+                    <button id="init-demo-btn" class="w-full mt-3 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">
+                        <i class="fas fa-rocket mr-2"></i>Initialize Demo
+                    </button>
+                </div>
 
-# Testing endpoints
-@app.get("/api/test/services")
-async def test_services():
-    """Test all services availability"""
-    results = {
-        "config": False,
-        "database": False,
-        "document_service": False,
-        "vector_service": False,
-        "ai_service": False,
-        "gmail_service": False,
-        "models": False
-    }
-    
-    try:
-        from config import settings
-        results["config"] = True
-    except:
-        pass
-    
-    try:
-        from database import init_db, get_db
-        results["database"] = True
-    except:
-        pass
-    
-    try:
-        from services.document_service import DocumentService
-        results["document_service"] = True
-    except:
-        pass
-    
-    try:
-        from services.vector_service import VectorService
-        results["vector_service"] = True
-    except:
-        pass
-    
-    try:
-        from services.ai_service import AIService
-        results["ai_service"] = True
-    except:
-        pass
-    
-    try:
-        from services.gmail_service import GmailService
-        results["gmail_service"] = True
-    except:
-        pass
-    
-    try:
-        from models.client import Client
-        from models.document import Document
-        from models.email import Email
-        from models.conversation import Conversation
-        results["models"] = True
-    except:
-        pass
-    
-    return {
-        "service_availability": results,
-        "all_services_available": all(results.values()),
-        "missing_services": [k for k, v in results.items() if not v],
-        "environment": {
-            "FULL_FEATURES": FULL_FEATURES,
-            "SERVICES_AVAILABLE": SERVICES_AVAILABLE,
-            "MODELS_AVAILABLE": MODELS_AVAILABLE
+                <!-- Client Stats -->
+                <div id="client-stats" class="glass-card rounded-xl p-6 shadow-lg mb-6 hidden">
+                    <h3 class="font-semibold text-gray-900 mb-4">Client Overview</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">Documents</span>
+                            <span id="stats-docs" class="font-semibold text-blue-600">0</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">Emails</span>
+                            <span id="stats-emails" class="font-semibold text-green-600">0</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-600">Conversations</span>
+                            <span id="stats-convos" class="font-semibold text-purple-600">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Upload -->
+                <div class="glass-card rounded-xl p-6 shadow-lg">
+                    <h3 class="font-semibold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-upload text-blue-600 mr-2"></i>
+                        Upload Documents
+                    </h3>
+                    <div id="file-drop-zone" class="file-drop-zone p-8 text-center cursor-pointer">
+                        <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-3"></i>
+                        <p class="text-gray-600 mb-2">Drop files here or click to browse</p>
+                        <p class="text-sm text-gray-500">PDF, DOCX, TXT files supported</p>
+                        <input type="file" id="file-input" class="hidden" multiple accept=".pdf,.docx,.txt,.md">
+                    </div>
+                    <div id="upload-progress" class="hidden mt-4">
+                        <div class="bg-gray-200 rounded-full h-2">
+                            <div id="progress-bar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p id="upload-status" class="text-sm text-gray-600 mt-2">Uploading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chat Area -->
+            <div class="lg:col-span-3">
+                <div class="glass-card rounded-xl shadow-lg h-96 lg:h-[600px] flex flex-col">
+                    <!-- Chat Header -->
+                    <div class="p-6 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-xl font-semibold text-gray-900">AI Legal Assistant</h2>
+                                <p class="text-gray-600">Ask questions about your documents and emails</p>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="clear-chat-btn" class="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button id="suggestions-btn" class="bg-blue-100 text-blue-600 px-3 py-1 rounded-lg text-sm hover:bg-blue-200 transition-colors">
+                                    <i class="fas fa-lightbulb mr-1"></i>Suggestions
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                        <div class="ai-message chat-message p-4">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-robot text-blue-600"></i>
+                                </div>
+                                <div>
+                                    <p class="text-gray-900">👋 Hello! I'm your AI legal assistant. I can help you analyze documents, review email threads, and answer questions about your legal matters.</p>
+                                    <p class="text-gray-600 mt-2">To get started, please select a client and upload some documents or connect your Gmail.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Suggested Questions -->
+                    <div id="suggested-questions" class="hidden px-6 py-3 border-t border-gray-100">
+                        <div class="flex flex-wrap gap-2">
+                        </div>
+                    </div>
+
+                    <!-- Chat Input -->
+                    <div class="p-6 border-t border-gray-200">
+                        <div class="flex space-x-3">
+                            <div class="flex-1">
+                                <input 
+                                    type="text" 
+                                    id="chat-input" 
+                                    placeholder="Ask a question about your legal documents..."
+                                    class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    disabled
+                                >
+                            </div>
+                            <button 
+                                id="send-btn" 
+                                class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled
+                            >
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">Select a client to start asking questions</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+            <div class="text-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">Processing...</h3>
+                <p id="loading-text" class="text-gray-600">Please wait while we process your request.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = window.location.origin;
+        let currentClientId = null;
+        let isTyping = false;
+
+        // DOM Elements
+        const clientSelector = document.getElementById('client-selector');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        const fileInput = document.getElementById('file-input');
+        const fileDropZone = document.getElementById('file-drop-zone');
+        const uploadProgress = document.getElementById('upload-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const uploadStatus = document.getElementById('upload-status');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+
+        // Utility Functions
+        function showLoading(text = 'Processing...') {
+            loadingText.textContent = text;
+            loadingOverlay.classList.remove('hidden');
         }
-    }
-@app.get("/api/chat/test")
-async def test_chat_endpoint():
-    """Test chat endpoint is working"""
-    return {
-        "success": True,
-        "message": "Chat endpoint is properly registered",
-        "available_endpoints": {
-            "ask_question": "/api/chat/{client_id}/ask",
-            "conversations": "/api/chat/{client_id}/conversations"
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
         }
-    }
-# Error handler
+
+        function showError(message) {
+            addMessage('ai', `❌ Error: ${message}`, [], 'error');
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // API Functions
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                    throw new Error(errorData.detail || `HTTP ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+
+        // Load clients
+        async function loadClients() {
+            try {
+                const clients = await apiCall('/api/clients/');
+                clientSelector.innerHTML = '<option value="">Select a client...</option>';
+                
+                clients.forEach(client => {
+                    const option = document.createElement('option');
+                    option.value = client.id;
+                    option.textContent = `${client.name} (${client.company || 'No company'})`;
+                    clientSelector.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load clients:', error);
+                clientSelector.innerHTML = '<option value="">Failed to load clients</option>';
+            }
+        }
+
+        // Load client stats
+        async function loadClientStats(clientId) {
+            try {
+                const stats = await apiCall(`/api/clients/${clientId}/stats`);
+                document.getElementById('stats-docs').textContent = stats.documents_uploaded || 0;
+                document.getElementById('stats-emails').textContent = stats.emails_ingested || 0;
+                document.getElementById('stats-convos').textContent = stats.conversations || 0;
+                document.getElementById('client-stats').classList.remove('hidden');
+            } catch (error) {
+                console.error('Failed to load client stats:', error);
+            }
+        }
+
+        // Get question suggestions
+        async function loadSuggestions(clientId) {
+            try {
+                const response = await apiCall(`/api/chat/${clientId}/suggestions`);
+                const container = document.querySelector('#suggested-questions .flex');
+                container.innerHTML = '';
+                
+                response.suggestions.forEach(suggestion => {
+                    const button = document.createElement('button');
+                    button.className = 'text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-100 transition-colors';
+                    button.textContent = suggestion;
+                    button.addEventListener('click', () => {
+                        chatInput.value = suggestion;
+                        sendMessage();
+                    });
+                    container.appendChild(button);
+                });
+                
+                if (response.suggestions.length > 0) {
+                    document.getElementById('suggested-questions').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Failed to load suggestions:', error);
+            }
+        }
+
+        // Chat functions
+        function addMessage(sender, content, sources = [], type = 'normal') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${sender === 'user' ? 'user-message' : 'ai-message'} p-4`;
+            
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3 justify-end">
+                        <div class="text-right">
+                            <p class="text-white">${content}</p>
+                        </div>
+                        <div class="w-8 h-8 bg-blue-800 rounded-full flex items-center justify-center">
+                            <i class="fas fa-user text-white text-sm"></i>
+                        </div>
+                    </div>
+                `;
+            } else {
+                const sourcesHtml = sources.length > 0 ? `
+                    <div class="mt-3 flex flex-wrap gap-1">
+                        ${sources.map(source => {
+                            const icon = source.type === 'document' ? 'fas fa-file-alt' : 'fas fa-envelope';
+                            const title = source.type === 'document' ? source.filename : source.subject;
+                            return `<span class="source-badge"><i class="${icon}"></i> ${title}</span>`;
+                        }).join('')}
+                    </div>
+                ` : '';
+                
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                            <i class="fas fa-robot text-blue-600"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-gray-900">${content}</p>
+                            ${sourcesHtml}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'ai-message chat-message p-4';
+            typingDiv.id = 'typing-indicator';
+            typingDiv.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <i class="fas fa-robot text-blue-600"></i>
+                    </div>
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message || !currentClientId || isTyping) return;
+            
+            isTyping = true;
+            sendBtn.disabled = true;
+            chatInput.disabled = true;
+            
+            // Add user message
+            addMessage('user', message);
+            chatInput.value = '';
+            
+            // Add typing indicator
+            addTypingIndicator();
+            
+            try {
+                const response = await apiCall(`/api/chat/${currentClientId}/ask`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        question: message,
+                        include_history: true
+                    })
+                });
+                
+                removeTypingIndicator();
+                addMessage('ai', response.answer, response.sources);
+                
+                // Update stats
+                loadClientStats(currentClientId);
+                
+            } catch (error) {
+                removeTypingIndicator();
+                showError(error.message);
+            } finally {
+                isTyping = false;
+                sendBtn.disabled = false;
+                chatInput.disabled = false;
+                chatInput.focus();
+            }
+        }
+
+        // File upload functions
+        async function uploadFile(file) {
+            if (!currentClientId) {
+                throw new Error('Please select a client first');
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                throw new Error(errorData.detail || `Upload failed: ${response.status}`);
+            }
+            
+            return await response.json();
+        }
+
+        async function handleFileUpload(files) {
+            if (!currentClientId) {
+                showError('Please select a client first');
+                return;
+            }
+            
+            uploadProgress.classList.remove('hidden');
+            const totalFiles = files.length;
+            let uploadedFiles = 0;
+            
+            for (const file of files) {
+                try {
+                    uploadStatus.textContent = `Uploading ${file.name}...`;
+                    
+                    const result = await uploadFile(file);
+                    uploadedFiles++;
+                    
+                    const progress = (uploadedFiles / totalFiles) * 100;
+                    progressBar.style.width = `${progress}%`;
+                    
+                    addMessage('ai', `✅ Successfully uploaded "${file.name}" (${formatFileSize(file.size)}). Document processed with ${result.extraction?.word_count || 0} words and ${result.vector_store?.chunks_created || 0} chunks created.`);
+                    
+                } catch (error) {
+                    console.error(`Failed to upload ${file.name}:`, error);
+                    addMessage('ai', `❌ Failed to upload "${file.name}": ${error.message}`, [], 'error');
+                }
+            }
+            
+            uploadStatus.textContent = `Completed ${uploadedFiles}/${totalFiles} uploads`;
+            
+            setTimeout(() => {
+                uploadProgress.classList.add('hidden');
+                progressBar.style.width = '0%';
+            }, 2000);
+            
+            // Refresh client stats and suggestions
+            loadClientStats(currentClientId);
+            loadSuggestions(currentClientId);
+        }
+
+        // Initialize demo data
+        async function initializeDemo() {
+            showLoading('Initializing demo data...');
+            
+            try {
+                const result = await apiCall('/api/init-demo', { method: 'POST' });
+                
+                addMessage('ai', `🎉 Demo data initialized successfully! Created ${result.data.clients.clients.length} clients with sample documents and emails. You can now ask questions like "What equity grant was proposed for John Smith?" or "Summarize the legal documents."`);
+                
+                // Reload clients
+                await loadClients();
+                
+                // Auto-select Lexsy client
+                const lexsyOption = Array.from(clientSelector.options).find(option => 
+                    option.textContent.toLowerCase().includes('lexsy')
+                );
+                if (lexsyOption) {
+                    clientSelector.value = lexsyOption.value;
+                    clientSelector.dispatchEvent(new Event('change'));
+                }
+                
+            } catch (error) {
+                showError(`Failed to initialize demo: ${error.message}`);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Gmail authentication
+        async function connectGmail() {
+            try {
+                const result = await apiCall('/api/auth/gmail/auth-url');
+                window.open(result.auth_url, '_blank', 'width=500,height=600');
+                
+                // Check for authentication completion
+                const checkAuth = setInterval(async () => {
+                    try {
+                        const status = await apiCall('/api/auth/gmail/status');
+                        if (status.authenticated) {
+                            clearInterval(checkAuth);
+                            document.getElementById('gmail-status').classList.remove('hidden');
+                            document.getElementById('gmail-auth-btn').classList.add('hidden');
+                            addMessage('ai', `✅ Gmail connected successfully! Account: ${status.email}`);
+                        }
+                    } catch (error) {
+                        // Still checking...
+                    }
+                }, 2000);
+                
+                // Stop checking after 60 seconds
+                setTimeout(() => clearInterval(checkAuth), 60000);
+                
+            } catch (error) {
+                showError(`Gmail connection failed: ${error.message}`);
+            }
+        }
+
+        // Event Listeners
+        clientSelector.addEventListener('change', async (e) => {
+            currentClientId = e.target.value;
+            
+            if (currentClientId) {
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                chatInput.placeholder = 'Ask a question about your legal documents...';
+                
+                // Load client data
+                loadClientStats(currentClientId);
+                loadSuggestions(currentClientId);
+                
+                const clientName = e.target.options[e.target.selectedIndex].text;
+                addMessage('ai', `👋 Switched to ${clientName}. You can now ask questions about their documents and emails.`);
+            } else {
+                chatInput.disabled = true;
+                sendBtn.disabled = true;
+                chatInput.placeholder = 'Select a client to start asking questions';
+                document.getElementById('client-stats').classList.add('hidden');
+                document.getElementById('suggested-questions').classList.add('hidden');
+            }
+        });
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        sendBtn.addEventListener('click', sendMessage);
+
+        // File upload events
+        fileDropZone.addEventListener('click', () => fileInput.click());
+
+        fileDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileDropZone.classList.add('dragover');
+        });
+
+        fileDropZone.addEventListener('dragleave', () => {
+            fileDropZone.classList.remove('dragover');
+        });
+
+        fileDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileDropZone.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            handleFileUpload(files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                handleFileUpload(files);
+            }
+        });
+
+        // Other button events
+        document.getElementById('init-demo-btn').addEventListener('click', initializeDemo);
+        document.getElementById('gmail-auth-btn').addEventListener('click', connectGmail);
+
+        document.getElementById('clear-chat-btn').addEventListener('click', () => {
+            const welcomeMessage = chatMessages.querySelector('.ai-message');
+            chatMessages.innerHTML = '';
+            chatMessages.appendChild(welcomeMessage);
+        });
+
+        document.getElementById('suggestions-btn').addEventListener('click', () => {
+            const suggestionsDiv = document.getElementById('suggested-questions');
+            suggestionsDiv.classList.toggle('hidden');
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Load initial data
+            await loadClients();
+            
+            // Check Gmail status
+            try {
+                const status = await apiCall('/api/auth/gmail/status');
+                if (status.authenticated) {
+                    document.getElementById('gmail-status').classList.remove('hidden');
+                    document.getElementById('gmail-auth-btn').classList.add('hidden');
+                }
+            } catch (error) {
+                // Gmail not connected
+            }
+            
+            // Show welcome message with current status
+            setTimeout(() => {
+                addMessage('ai', '🚀 System ready! Initialize demo data to get started with sample legal documents and emails, or select a client and upload your own files.');
+            }, 500);
+        });
+    </script>
+</body>
+</html>""", status_code=200)
+
+# Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
-    """Global exception handler"""
-    print(f"❌ Global error: {exc}")
-    return {
-        "error": "Internal server error",
-        "detail": str(exc),
-        "path": str(request.url),
-        "feature_status": {
-            "full_features": FULL_FEATURES,
-            "services": SERVICES_AVAILABLE,
-            "models": MODELS_AVAILABLE
+    """Global exception handler for better error responses"""
+    if settings.DEBUG:
+        import traceback
+        return {
+            "error": "Internal server error",
+            "detail": str(exc),
+            "traceback": traceback.format_exc() if settings.DEBUG else None
         }
-    }
+    else:
+        return {
+            "error": "Internal server error",
+            "detail": "An unexpected error occurred"
+        }
+
+# Demo initialization endpoint
+@app.post("/api/init-demo")
+async def initialize_demo():
+    """Initialize demo data (clients, documents, emails)"""
+    try:
+        from sqlalchemy.orm import Session
+        from database import SessionLocal
+        from api.clients import init_sample_clients
+        from api.documents import upload_sample_documents
+        from api.emails import ingest_sample_emails
+        
+        db = SessionLocal()
+        
+        try:
+            # Initialize sample clients
+            clients_response = await init_sample_clients(db=db)
+            
+            # Get Lexsy client ID
+            lexsy_client = None
+            for client in clients_response["clients"]:
+                if "lexsy" in client["email"].lower():
+                    lexsy_client = client
+                    break
+            
+            if not lexsy_client:
+                raise Exception("Lexsy client not found")
+            
+            lexsy_client_id = lexsy_client["id"]
+            
+            # Upload sample documents for Lexsy
+            docs_response = await upload_sample_documents(client_id=lexsy_client_id, db=db)
+            
+            # Ingest sample emails for Lexsy
+            emails_response = await ingest_sample_emails(client_id=lexsy_client_id, db=db)
+            
+            return {
+                "success": True,
+                "message": "Demo data initialized successfully",
+                "data": {
+                    "clients": clients_response,
+                    "documents": docs_response,
+                    "emails": emails_response
+                }
+            }
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Demo initialization failed: {str(e)}")
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level="info"
+    )
