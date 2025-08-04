@@ -1294,9 +1294,33 @@ async function connectGmail() {
         const data = await response.json();
         
         if (data.success) {
-            showAlert('Redirecting to Gmail authentication...', 'info');
-            // Direct redirect - most reliable
-            window.location.href = data.auth_url;
+            showAlert('Opening Gmail authentication...', 'info');
+            
+            const authWindow = window.open(
+                data.auth_url, 
+                'gmail_auth', 
+                'width=500,height=600,scrollbars=yes,resizable=yes'
+            );
+            
+            // Listen for success message from popup
+            const messageHandler = function(event) {
+                if (event.data.type === 'GMAIL_AUTH_SUCCESS') {
+                    document.getElementById('gmailStatus').style.display = 'block';
+                    document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
+                    document.getElementById('monitorBtn').style.display = 'block';
+                    showAlert('Gmail connected successfully!', 'success');
+                    
+                    // Remove event listener
+                    window.removeEventListener('message', messageHandler);
+                    
+                    if (document.getElementById('emailsTab').classList.contains('active')) {
+                        loadEmails();
+                    }
+                }
+            };
+            
+            window.addEventListener('message', messageHandler);
+            
         } else {
             showAlert('Failed to get Gmail auth URL. Please try again.', 'error');
         }
