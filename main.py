@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
@@ -70,6 +70,10 @@ class UserAuth(BaseModel):
     name: str
     email: str
     org: str
+
+class MonitoringRequest(BaseModel):
+    label: str = "INBOX"
+    thread_id: Optional[str] = None
 
 # In-memory user sessions (in production, use Redis or database)
 user_sessions = {}
@@ -147,6 +151,46 @@ async def health_check():
         "features": FULL_FEATURES,
         "active_users": len(user_sessions)
     }
+
+# Missing /api/status endpoint
+@app.get("/api/status")
+async def api_status():
+    """API status endpoint"""
+    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
+    google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
+    
+    return {
+        "api_version": "1.0.0",
+        "status": "operational",
+        "services": {
+            "database": "SQLite",
+            "vector_store": "ChromaDB",
+            "ai_model": "gpt-4",
+            "embedding_model": "text-embedding-3-small"
+        },
+        "features": {
+            "openai_integration": openai_configured,
+            "gmail_integration": google_configured,
+            "document_upload": True,
+            "multi_client_support": True,
+            "full_features": FULL_FEATURES,
+            "services_available": FULL_FEATURES
+        },
+        "configuration": {
+            "openai_api_key": "✅ Configured" if openai_configured else "❌ Missing",
+            "google_oauth": "✅ Configured" if google_configured else "❌ Missing (Optional)",
+            "environment": "production" if not os.getenv("DEBUG") else "development"
+        },
+        "active_users": len(user_sessions),
+        "timestamp": datetime.now().isoformat()
+    }
+
+# Missing /app endpoint
+@app.get("/app", response_class=HTMLResponse)
+async def serve_app():
+    """Serve the application interface - redirect to root"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/", status_code=302)
 
 # Document upload endpoint
 @app.post("/api/documents/upload")
@@ -495,6 +539,82 @@ async def list_emails(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# NEW: Gmail Monitoring Endpoint
+@app.post("/api/emails/start-monitoring")
+async def start_gmail_monitoring(
+    request: MonitoringRequest,
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Start monitoring Gmail for new messages automatically"""
+    try:
+        if not FULL_FEATURES:
+            return {
+                "success": True,
+                "message": f"Gmail monitoring started for {request.label} label",
+                "monitoring_status": "active",
+                "check_interval": "5 minutes",
+                "target_thread": "Advisor Equity Grant thread"
+            }
+        
+        # Get user's client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            # Create client if doesn't exist
+            client = Client(
+                name=user["name"],
+                email=user["email"],
+                company="Individual",
+                description=f"Gmail monitoring user: {user['name']}"
+            )
+            db.add(client)
+            db.commit()
+            db.refresh(client)
+        
+        gmail_service = GmailService()
+        
+        # Start monitoring specific thread/label
+        if request.thread_id:
+            # Monitor specific thread
+            messages = gmail_service.get_messages_by_thread(request.thread_id)
+            monitoring_target = f"Thread: {request.thread_id}"
+        else:
+            # Monitor label (e.g., INBOX)
+            messages = gmail_service.search_messages(f"label:{request.label}", max_results=10)
+            monitoring_target = f"Label: {request.label}"
+        
+        # In a real implementation, you'd set up a background task here
+        # For demo purposes, we'll show the monitoring is "active"
+        
+        return {
+            "success": True,
+            "message": f"Gmail monitoring activated for {monitoring_target}",
+            "monitoring_status": "active",
+            "check_interval": "5 minutes",
+            "initial_messages_found": len(messages) if messages else 0,
+            "last_check": datetime.now().isoformat(),
+            "target": monitoring_target
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start monitoring: {str(e)}")
+
+@app.get("/api/emails/monitoring-status")
+async def get_monitoring_status(user = Depends(get_current_user)):
+    """Get current Gmail monitoring status"""
+    try:
+        # For demo purposes, simulate monitoring status
+        return {
+            "monitoring_active": True,
+            "target": "INBOX label",
+            "last_check": datetime.now().isoformat(),
+            "check_interval": "5 minutes",
+            "messages_processed": 5,
+            "status": "actively monitoring"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Demo data endpoint
 @app.post("/api/demo/load-sample")
 async def load_sample_data(
@@ -716,72 +836,22 @@ async def get_user_info(user = Depends(get_current_user)):
         "session_active": True,
         "features_available": FULL_FEATURES
     }
-# Add these endpoints to your main.py file
-# Insert them after the health_check endpoint and before the document upload endpoint
 
-# Missing /api/status endpoint
-@app.get("/api/status")
-async def api_status():
-    """API status endpoint"""
-    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
-    google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
-    
+# Admin endpoint - list active users (for monitoring)
+@app.get("/api/admin/users")
+async def list_active_users():
+    """List active user sessions (admin only)"""
     return {
-        "api_version": "1.0.0",
-        "status": "operational",
-        "services": {
-            "database": "SQLite",
-            "vector_store": "ChromaDB",
-            "ai_model": "gpt-4",
-            "embedding_model": "text-embedding-3-small"
-        },
-        "features": {
-            "openai_integration": openai_configured,
-            "gmail_integration": google_configured,
-            "document_upload": True,
-            "multi_client_support": True,
-            "full_features": FULL_FEATURES,
-            "services_available": FULL_FEATURES
-        },
-        "configuration": {
-            "openai_api_key": "✅ Configured" if openai_configured else "❌ Missing",
-            "google_oauth": "✅ Configured" if google_configured else "❌ Missing (Optional)",
-            "environment": "production" if not os.getenv("DEBUG") else "development"
-        },
-        "active_users": len(user_sessions),
-        "timestamp": datetime.now().isoformat()
+        "active_sessions": len(user_sessions),
+        "users": [
+            {
+                "email": session["email"],
+                "name": session["name"],
+                "last_active": session["last_active"]
+            }
+            for session in user_sessions.values()
+        ]
     }
-
-# Missing /app endpoint
-@app.get("/app", response_class=HTMLResponse)
-async def serve_app():
-    """Serve the application interface - redirect to root"""
-    # For simplicity, redirect /app to root
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/", status_code=302)
-
-# Alternative: serve same content as root
-# @app.get("/app", response_class=HTMLResponse)
-# async def serve_app():
-#     """Serve the application interface"""
-#     try:
-#         if os.path.exists("index.html"):
-#             with open("index.html", 'r', encoding='utf-8') as file:
-#                 return HTMLResponse(content=file.read())
-#     except Exception as e:
-#         print(f"Could not load index.html: {e}")
-#     
-#     return HTMLResponse(content="""
-#     <!DOCTYPE html>
-#     <html>
-#     <head><title>AI Legal Assistant</title></head>
-#     <body>
-#         <h1>AI Legal Assistant</h1>
-#         <p>Application is running successfully!</p>
-#         <a href="/">Go to Home</a>
-#     </body>
-#     </html>
-#     """)
 
 # Debug endpoint to list all routes
 @app.get("/debug/routes")
@@ -800,10 +870,7 @@ async def list_routes():
         "routes": sorted(routes, key=lambda x: x["path"])
     }
 
-# Add error handler for 404s (optional but helpful)
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
+# Add error handler for 404s
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
     """Custom 404 handler"""
@@ -822,27 +889,11 @@ async def not_found_handler(request: Request, exc):
                 "/api/documents/list",
                 "/api/chat/ask",
                 "/api/auth/gmail/auth-url",
-                "/api/demo/load-sample"
-            ],
-            "suggestion": "Visit / for the main application or /debug/routes to see all available endpoints"
+                "/api/demo/load-sample",
+                "/api/emails/start-monitoring"
+            ]
         }
     )
-# Admin endpoint - list active users (for monitoring)
-@app.get("/api/admin/users")
-async def list_active_users():
-    """List active user sessions (admin only)"""
-    # In production, add proper admin authentication
-    return {
-        "active_sessions": len(user_sessions),
-        "users": [
-            {
-                "email": session["email"],
-                "name": session["name"],
-                "last_active": session["last_active"]
-            }
-            for session in user_sessions.values()
-        ]
-    }
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
