@@ -619,7 +619,7 @@
                 <span>AI Legal Assistant</span>
             </div>
             <div class="user-info" id="userInfo" style="display: none;">
-                <span id="userName">User</span>
+                <span id="userNameDisplay">User</span>
                 <div class="user-avatar" id="userAvatar">U</div>
                 <button onclick="logout()" style="background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">
                     Logout
@@ -794,17 +794,19 @@
             document.getElementById('authSection').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
             
-            // Update header
+            // Update header with safe access
             const userInfo = document.getElementById('userInfo');
-            const userName = document.getElementById('userName');
+            const userNameDisplay = document.getElementById('userNameDisplay');
             const userAvatar = document.getElementById('userAvatar');
             
-            userInfo.style.display = 'flex';
-            userName.textContent = currentUser.name;
-            userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+            if (currentUser && currentUser.name && userNameDisplay && userAvatar) {
+                userInfo.style.display = 'flex';
+                userNameDisplay.textContent = currentUser.name;
+                userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+            }
             
             isAuthenticated = true;
-            showAlert(`Welcome ${currentUser.name}! Ready to analyze your legal documents.`, 'success');
+            showAlert(`Welcome ${currentUser?.name || 'User'}! Ready to analyze your legal documents.`, 'success');
         }
 
         function logout() {
@@ -818,6 +820,8 @@
             
             // Clear form
             document.querySelector('.auth-form').reset();
+            
+            showAlert('Logged out successfully', 'success');
         }
 
         function setupEventListeners() {
@@ -1266,7 +1270,7 @@
 
         async function connectGmail() {
             if (!isAuthenticated) {
-                showAlert('Please sign in first', 'error');
+                showAlert('Please sign in first to connect Gmail', 'error');
                 return;
             }
 
@@ -1306,7 +1310,7 @@
 
         async function loadSampleData() {
             if (!isAuthenticated) {
-                showAlert('Please sign in first', 'error');
+                showAlert('Please sign in first to load sample data', 'error');
                 return;
             }
 
