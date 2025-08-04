@@ -1277,48 +1277,33 @@
             }
         }
 
-        async function connectGmail() {
-            if (!isAuthenticated) {
-                showAlert('Please sign in first to connect Gmail', 'error');
-                return;
-            }
+        // Replace your connectGmail function with this:
+async function connectGmail() {
+    if (!isAuthenticated) {
+        showAlert('Please sign in first to connect Gmail', 'error');
+        return;
+    }
 
-            try {
-                const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`, {
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.success) {
-                    const authWindow = window.open(data.auth_url, 'gmail_auth', 'width=500,height=600,scrollbars=yes,resizable=yes');
-                    showAlert('Gmail authentication opened in popup window', 'info');
-                    
-                    // Check if window is closed
-                    const checkClosed = setInterval(() => {
-                        if (authWindow.closed) {
-                            clearInterval(checkClosed);
-                            document.getElementById('gmailStatus').style.display = 'block';
-                            document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
-                            document.getElementById('monitorBtn').style.display = 'block';
-                            showAlert('Gmail connected successfully! You can now start monitoring and analyze email threads.', 'success');
-                            
-                            // Refresh emails tab if active
-                            if (document.getElementById('emailsTab').classList.contains('active')) {
-                                loadEmails();
-                            }
-                        }
-                    }, 1000);
-                } else {
-                    showAlert('Failed to connect Gmail. Please try again.', 'error');
-                }
-            } catch (error) {
-                showAlert('Gmail connection error. Please try again.', 'error');
+    try {
+        const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`, {
+            headers: {
+                'X-User-Email': currentUser.email,
+                'X-User-Name': currentUser.name
             }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Redirecting to Gmail authentication...', 'info');
+            // Direct redirect - most reliable
+            window.location.href = data.auth_url;
+        } else {
+            showAlert('Failed to get Gmail auth URL. Please try again.', 'error');
         }
-
+    } catch (error) {
+        showAlert('Gmail connection error. Please try again.', 'error');
+    }
+}
         async function startGmailMonitoring() {
             if (!isAuthenticated) {
                 showAlert('Please sign in first', 'error');
