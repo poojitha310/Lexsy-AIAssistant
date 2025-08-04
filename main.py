@@ -1,99 +1,49 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from contextlib import asynccontextmanager
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
-from sqlalchemy.orm import Session
+from typing import List, Optional
 import uvicorn
 import os
 import json
+import hashlib
+import uuid
 from datetime import datetime
+from pathlib import Path
 
-# Import configuration and database
+# Import your existing services (with fallback for deployment)
 try:
     from config import settings
-    from database import init_db, get_db
-    FULL_FEATURES = True
-    print("✅ Full features available")
-except ImportError as e:
-    print(f"⚠️ Limited features: {e}")
-    # Fallback for minimal deployment
-    class Settings:
-        APP_NAME = "Lexsy AI Assistant"
-        DEBUG = False
-        DATABASE_URL = "sqlite:///./lexsy.db"
-        UPLOAD_DIR = "./uploads"
-        CHROMADB_PATH = "./chromadb"
-        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-        OPENAI_MODEL = "gpt-4"
-        OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-    settings = Settings()
-    FULL_FEATURES = False
-    
-    def init_db():
-        print("Database initialization skipped - minimal mode")
-    
-    def get_db():
-        yield None
-
-# Import services with fallback
-try:
-    from services.document_service import DocumentService
-    from services.vector_service import VectorService
-    from services.ai_service import AIService
-    from services.gmail_service import GmailService
-    SERVICES_AVAILABLE = True
-    print("✅ All services imported successfully")
-except ImportError as e:
-    print(f"⚠️ Services not available: {e}")
-    SERVICES_AVAILABLE = False
-
-# Import models with fallback
-try:
+    from database import init_db, get_db, SessionLocal
     from models.client import Client
     from models.document import Document
     from models.email import Email
     from models.conversation import Conversation
-    MODELS_AVAILABLE = True
-    print("✅ All models imported successfully")
+    from services.document_service import DocumentService
+    from services.vector_service import VectorService
+    from services.ai_service import AIService
+    from services.gmail_service import GmailService
+    FULL_FEATURES = True
+    print("✅ Full features available")
 except ImportError as e:
-    print(f"⚠️ Models not available: {e}")
-    MODELS_AVAILABLE = False
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Starting Lexsy AI Assistant...")
-    print(f"🌍 Environment: {'Development' if getattr(settings, 'DEBUG', False) else 'Production'}")
-    print(f"🔧 Full Features: {FULL_FEATURES}")
-    print(f"🛠️ Services: {SERVICES_AVAILABLE}")
-    print(f"📊 Models: {MODELS_AVAILABLE}")
+    print(f"⚠️ Limited features mode: {e}")
+    FULL_FEATURES = False
     
-    # Create directories
-    os.makedirs(getattr(settings, 'UPLOAD_DIR', './uploads'), exist_ok=True)
-    os.makedirs(getattr(settings, 'CHROMADB_PATH', './chromadb'), exist_ok=True)
+    # Fallback minimal setup
+    class Settings:
+        UPLOAD_DIR = "./uploads"
+        CHROMADB_PATH = "./chromadb"
+        MAX_FILE_SIZE = 10 * 1024 * 1024
+    settings = Settings()
     
-    # Initialize database
-    try:
-        init_db()
-        print("✅ Database initialized")
-    except Exception as e:
-        print(f"⚠️ Database initialization failed: {e}")
-    
-    yield
-    
-    # Shutdown
-    print("👋 Shutting down Lexsy AI Assistant...")
+    def get_db():
+        yield None
 
 # Create FastAPI app
 app = FastAPI(
-    title="Lexsy AI Assistant",
-    description="Legal Document & Email Analysis Platform - AI Assistant Panel for Lawyers",
-    version="1.0.0",
-    lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="AI Legal Assistant - Production",
+    description="Real-time document and email analysis for legal professionals",
+    version="1.0.0"
 )
 
 # CORS middleware
@@ -105,288 +55,500 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files (if directory exists)
-try:
-    if os.path.exists("static"):
-        app.mount("/static", StaticFiles(directory="static"), name="static")
-        print("✅ Static files mounted")
-except Exception as e:
-    print(f"⚠️ Could not mount static directory: {e}")
-
 # Pydantic models
 class ChatRequest(BaseModel):
     question: str
-    include_history: bool = True
+    user_context: dict
 
 class ChatResponse(BaseModel):
     success: bool
     answer: str
-    sources: list
-    context_used: int
-    tokens_used: int
-    response_time: float
+    sources: List[dict] = []
+    response_time: float = 0.0
 
-# Health check endpoint
-@app.get("/health")
-async def health_check():
+class UserAuth(BaseModel):
+    name: str
+    email: str
+    org: str
+
+# In-memory user sessions (in production, use Redis or database)
+user_sessions = {}
+
+def get_user_id(email: str) -> str:
+    """Generate consistent user ID from email"""
+    return hashlib.md5(email.encode()).hexdigest()
+
+def get_current_user(x_user_email: str = Header(...), x_user_name: str = Header(...)):
+    """Get current user from headers"""
+    if not x_user_email:
+        raise HTTPException(status_code=401, detail="User authentication required")
+    
+    user_id = get_user_id(x_user_email)
+    
+    # Store/update user session
+    user_sessions[user_id] = {
+        "email": x_user_email,
+        "name": x_user_name,
+        "last_active": datetime.now().isoformat()
+    }
+    
     return {
-        "status": "healthy",
-        "service": "lexsy-ai-assistant",
-        "version": "1.0.0",
-        "environment": "production" if not getattr(settings, 'DEBUG', True) else "development",
-        "port": os.getenv("PORT", "8000"),
-        "features": {
-            "full_features": FULL_FEATURES,
-            "services": SERVICES_AVAILABLE,
-            "models": MODELS_AVAILABLE
-        }
+        "id": user_id,
+        "email": x_user_email,
+        "name": x_user_name
     }
 
-# Root endpoint - serve the full application
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the application"""
+    print("🚀 Starting AI Legal Assistant (Production Mode)")
+    
+    # Create directories
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    os.makedirs(settings.CHROMADB_PATH, exist_ok=True)
+    
+    if FULL_FEATURES:
+        try:
+            init_db()
+            print("✅ Database initialized")
+        except Exception as e:
+            print(f"⚠️ Database initialization error: {e}")
+
+# Serve the main application
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve the main application interface"""
+    """Serve the real-time AI Assistant interface"""
     try:
         if os.path.exists("index.html"):
             with open("index.html", 'r', encoding='utf-8') as file:
-                html_content = file.read()
-                print("✅ Serving index.html from root")
-                return HTMLResponse(content=html_content)
+                return HTMLResponse(content=file.read())
     except Exception as e:
-        print(f"⚠️ Could not load index.html: {e}")
+        print(f"Could not load index.html: {e}")
     
     return HTMLResponse(content="""
     <!DOCTYPE html>
     <html>
-    <head>
-        <title>Lexsy AI Assistant</title>
-        <meta http-equiv="refresh" content="0; url=/app">
-    </head>
+    <head><title>AI Legal Assistant</title></head>
     <body>
-        <p>Redirecting to application...</p>
-        <script>window.location.href = '/app';</script>
+        <h1>AI Legal Assistant</h1>
+        <p>Production deployment ready</p>
+        <p>Please ensure index.html is in the root directory</p>
     </body>
     </html>
     """)
 
-# API status endpoint
-@app.get("/api/status")
-async def api_status():
-    """Get API status and configuration"""
-    openai_configured = bool(os.getenv("OPENAI_API_KEY"))
-    google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
-    
+# Health check
+@app.get("/health")
+async def health_check():
     return {
-        "api_version": "1.0.0",
-        "services": {
-            "database": "SQLite",
-            "vector_store": "ChromaDB",
-            "ai_model": "gpt-4",
-            "embedding_model": "text-embedding-3-small"
-        },
-        "features": {
-            "openai_integration": openai_configured,
-            "gmail_integration": google_configured,
-            "document_upload": True,
-            "multi_client_support": True,
-            "full_features": FULL_FEATURES,
-            "services_available": SERVICES_AVAILABLE
-        },
-        "configuration": {
-            "openai_api_key": "✅ Configured" if openai_configured else "❌ Missing",
-            "google_oauth": "✅ Configured" if google_configured else "❌ Missing (Optional)",
-            "environment": "production" if not getattr(settings, 'DEBUG', True) else "development"
-        }
+        "status": "healthy",
+        "service": "ai-legal-assistant",
+        "mode": "production",
+        "features": FULL_FEATURES,
+        "active_users": len(user_sessions)
     }
-# Demo initialization
-@app.post("/api/init-demo")
-async def initialize_demo():
-    """Initialize demo data with REAL processing"""
+
+# Document upload endpoint
+@app.post("/api/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Upload and process a document for the authenticated user"""
     try:
-        if FULL_FEATURES and SERVICES_AVAILABLE and MODELS_AVAILABLE:
-            # Real initialization
-            db = next(get_db())
-            
-            # Create sample clients if they don't exist
-            client_1 = db.query(Client).filter(Client.email == "legal@lexsy.com").first()
-            if not client_1:
-                client_1 = Client(
-                    name="Lexsy, Inc.",
-                    email="legal@lexsy.com",
-                    company="Lexsy, Inc.",
-                    description="AI-powered legal technology startup"
-                )
-                db.add(client_1)
-                db.commit()
-                db.refresh(client_1)
-            
-            client_2 = db.query(Client).filter(Client.email == "counsel@techcorp.com").first()
-            if not client_2:
-                client_2 = Client(
-                    name="TechCorp LLC",
-                    email="counsel@techcorp.com", 
-                    company="TechCorp LLC",
-                    description="Enterprise software company"
-                )
-                db.add(client_2)
-                db.commit()
-                db.refresh(client_2)
-            
-            print("✅ REAL: Demo clients initialized")
-            
+        # Validate file
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+        
+        valid_types = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain']
+        if file.content_type not in valid_types:
+            raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, or TXT")
+        
+        # Read file content
+        file_content = await file.read()
+        
+        if len(file_content) > settings.MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large. Max size is 10MB")
+        
+        if not FULL_FEATURES:
+            # Demo mode response
             return {
                 "success": True,
-                "message": "REAL demo data initialized with database",
-                "data": {
-                    "clients": [
-                        {"id": client_1.id, "name": client_1.name, "email": client_1.email},
-                        {"id": client_2.id, "name": client_2.name, "email": client_2.email}
-                    ]
+                "message": "File uploaded successfully (demo mode)",
+                "document": {
+                    "id": str(uuid.uuid4()),
+                    "filename": file.filename,
+                    "processing_status": "completed"
                 }
             }
-        else:
-            # Fallback demo
-            return {
-                "success": True,
-                "message": "Demo data initialized (basic mode)",
-                "data": {
-                    "clients": [
-                        {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
-                        {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
-                    ]
-                }
-            }
-    except Exception as e:
-        print(f"❌ Demo initialization error: {e}")
+        
+        # Get or create client for this user
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            client = Client(
+                name=user["name"],
+                email=user["email"],
+                company=user.get("org", "Individual"),
+                description=f"Individual user: {user['name']}"
+            )
+            db.add(client)
+            db.commit()
+            db.refresh(client)
+        
+        # Initialize services
+        doc_service = DocumentService()
+        vector_service = VectorService()
+        
+        # Save file
+        save_result = await doc_service.save_uploaded_file(
+            file_content=file_content,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+        
+        if not save_result["success"]:
+            raise HTTPException(status_code=400, detail=save_result["error"])
+        
+        # Create document record
+        document = Document(
+            client_id=client.id,
+            filename=save_result["filename"],
+            original_filename=save_result["original_filename"],
+            file_type=save_result["file_type"],
+            file_size=save_result["file_size"],
+            file_path=save_result["file_path"],
+            processing_status="processing"
+        )
+        
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        
+        # Extract text and add to vector store
+        try:
+            extraction_result = doc_service.extract_text_from_file(
+                file_path=save_result["file_path"],
+                file_type=save_result["file_type"]
+            )
+            
+            if extraction_result["success"]:
+                document.extracted_text = extraction_result["text"]
+                
+                # Add to vector store with user context
+                chunk_ids = vector_service.add_document_to_vector_store(
+                    client_id=client.id,
+                    document_id=document.id,
+                    text=extraction_result["text"],
+                    metadata={
+                        "filename": document.original_filename,
+                        "file_type": document.file_type,
+                        "user_email": user["email"],
+                        "uploaded_at": document.created_at.isoformat()
+                    }
+                )
+                
+                if chunk_ids:
+                    document.chunk_ids = json.dumps(chunk_ids)
+                    document.processing_status = "completed"
+                else:
+                    document.processing_status = "failed"
+            else:
+                document.processing_status = "failed"
+                
+            db.commit()
+            
+        except Exception as e:
+            document.processing_status = "failed"
+            db.commit()
+            print(f"Processing error: {e}")
+        
         return {
-            "success": False,
-            "error": str(e),
-            "message": "Demo initialization failed"
+            "success": True,
+            "message": "Document uploaded and processed successfully",
+            "document": document.to_dict()
         }
-
-# Client endpoints
-@app.get("/api/clients/")
-async def list_clients(db: Session = Depends(get_db)):
-    """Get all clients with REAL database"""
-    try:
-        if MODELS_AVAILABLE and db:
-            clients = db.query(Client).filter(Client.is_active == True).all()
-            return [client.to_dict() for client in clients]
-        else:
-            # Fallback
-            return [
-                {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com", "is_active": True},
-                {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com", "is_active": True}
-            ]
-    except Exception as e:
-        print(f"❌ Client list error: {e}")
-        return [
-            {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com", "is_active": True},
-            {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com", "is_active": True}
-        ]
-
-@app.get("/api/clients/{client_id}")
-async def get_client(client_id: int, db: Session = Depends(get_db)):
-    """Get a specific client"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
-            if client:
-                return client.to_dict()
-            else:
-                raise HTTPException(status_code=404, detail="Client not found")
-        else:
-            # Fallback
-            clients = {
-                1: {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
-                2: {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
-            }
-            if client_id in clients:
-                return clients[client_id]
-            else:
-                raise HTTPException(status_code=404, detail="Client not found")
+        
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Get client error: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+# Get user's documents
+@app.get("/api/documents/list")
+async def list_documents(
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Get all documents for the authenticated user"""
+    try:
+        if not FULL_FEATURES:
+            return {"documents": []}
+        
+        # Get user's client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            return {"documents": []}
+        
+        documents = db.query(Document).filter(Document.client_id == client.id).all()
+        
+        return {
+            "documents": [doc.to_dict() for doc in documents],
+            "total": len(documents)
+        }
+        
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/clients/{client_id}/stats")
-async def get_client_stats(client_id: int, db: Session = Depends(get_db)):
-    """Get statistics for a client with REAL data"""
+# Delete document
+@app.delete("/api/documents/{document_id}")
+async def delete_document(
+    document_id: int,
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Delete a document"""
     try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            # Get real stats
-            documents_count = len(client.documents)
-            emails_count = len(client.emails)
-            conversations_count = len(client.conversations)
-            
-            # Get vector store stats if available
-            vector_stats = {"total_chunks": 0, "documents": 0, "emails": 0}
-            if SERVICES_AVAILABLE:
-                try:
-                    vector_service = VectorService()
-                    vector_stats = vector_service.get_client_content_stats(client_id)
-                except:
-                    pass
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "documents_uploaded": documents_count,
-                "emails_ingested": emails_count,
-                "conversations": conversations_count,
-                "vector_store": vector_stats
-            }
-        else:
-            # Fallback stats
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "documents_uploaded": 3 if client_id == 1 else 0,
-                "emails_ingested": 5 if client_id == 1 else 0,
-                "conversations": 0,
-                "vector_store": {"total_chunks": 15 if client_id == 1 else 0}
-            }
+        if not FULL_FEATURES:
+            return {"success": True, "message": "Document deleted (demo mode)"}
+        
+        # Get user's client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Find document
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.client_id == client.id
+        ).first()
+        
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Delete from vector store
+        vector_service = VectorService()
+        vector_service.delete_document_chunks(client.id, document_id)
+        
+        # Delete file
+        if document.file_path and os.path.exists(document.file_path):
+            os.remove(document.file_path)
+        
+        # Delete from database
+        db.delete(document)
+        db.commit()
+        
+        return {"success": True, "message": "Document deleted successfully"}
+        
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Client stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-# Document endpoints with REAL processing
-@app.post("/api/documents/{client_id}/upload-sample-documents")
-async def upload_sample_docs(client_id: int, db: Session = Depends(get_db)):
-    """Upload sample documents with REAL processing"""
+
+# AI Chat endpoint
+@app.post("/api/chat/ask", response_model=ChatResponse)
+async def ask_question(
+    request: ChatRequest,
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Ask a question against user's documents and emails"""
     try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            print(f"✅ REAL: Processing sample documents for client {client_id}")
+        if not FULL_FEATURES:
+            # Demo responses
+            question_lower = request.question.lower()
+            if "john smith" in question_lower or "equity" in question_lower:
+                answer = "Based on the sample data, Alex proposed a 15,000 RSA equity grant for John Smith as Strategic Advisor with 2-year monthly vesting and no cliff."
+            elif "vesting" in question_lower:
+                answer = "The vesting terms discussed are 2-year monthly vesting with no cliff, effective from July 22, 2025."
+            elif "document" in question_lower:
+                answer = "I can analyze your uploaded documents. Please upload PDF, DOCX, or TXT files and I'll help you find key information."
+            else:
+                answer = f"I can help analyze your legal documents and emails. Upload files or connect Gmail to get started, then ask specific questions about your legal matters."
             
-            # Initialize services
-            doc_service = DocumentService()
-            vector_service = VectorService()
+            return ChatResponse(
+                success=True,
+                answer=answer,
+                sources=[{"type": "demo", "content": "Sample response"}],
+                response_time=0.5
+            )
+        
+        # Get user's client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            # Create client if doesn't exist
+            client = Client(
+                name=user["name"],
+                email=user["email"],
+                company=request.user_context.get("org", "Individual"),
+                description=f"Individual user: {user['name']}"
+            )
+            db.add(client)
+            db.commit()
+            db.refresh(client)
+        
+        # Initialize AI service
+        ai_service = AIService()
+        
+        # Generate AI response using user's specific context
+        response = ai_service.generate_response(
+            client_id=client.id,
+            question=request.question,
+            conversation_history=None  # Could add conversation history here
+        )
+        
+        if response["success"]:
+            # Save conversation
+            conversation = Conversation(
+                client_id=client.id,
+                question=request.question,
+                answer=response["answer"],
+                response_time=response["response_time"],
+                tokens_used=response.get("tokens_used", 0)
+            )
+            db.add(conversation)
+            db.commit()
             
-            # Get sample documents
+            return ChatResponse(
+                success=True,
+                answer=response["answer"],
+                sources=response.get("sources", []),
+                response_time=response["response_time"]
+            )
+        else:
+            raise HTTPException(status_code=500, detail="AI processing failed")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
+
+# Gmail OAuth endpoints
+@app.get("/api/auth/gmail/auth-url")
+async def get_gmail_auth_url(user = Depends(get_current_user)):
+    """Get Gmail OAuth URL for user"""
+    try:
+        if not FULL_FEATURES:
+            return {
+                "success": True,
+                "auth_url": "https://accounts.google.com/oauth/authorize?demo=true",
+                "message": "Gmail OAuth (demo mode)"
+            }
+        
+        gmail_service = GmailService()
+        auth_url = gmail_service.get_auth_url()
+        
+        return {
+            "success": True,
+            "auth_url": auth_url,
+            "message": "Gmail OAuth URL generated"
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/auth/gmail/callback")
+async def gmail_callback(code: str, error: str = None):
+    """Handle Gmail OAuth callback"""
+    try:
+        if error:
+            raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+        
+        if not FULL_FEATURES:
+            return {"success": True, "message": "Gmail connected (demo mode)"}
+        
+        gmail_service = GmailService()
+        result = gmail_service.authenticate_with_code(code)
+        
+        return {
+            "success": result.get("success", False),
+            "message": "Gmail authentication completed",
+            "user_email": result.get("email")
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Email endpoints
+@app.get("/api/emails/list")
+async def list_emails(
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Get emails for the authenticated user"""
+    try:
+        if not FULL_FEATURES:
+            return {"emails": []}
+        
+        # Get user's client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            return {"emails": []}
+        
+        emails = db.query(Email).filter(Email.client_id == client.id).order_by(Email.date_sent.asc()).all()
+        
+        return {
+            "emails": [email.to_dict() for email in emails],
+            "total": len(emails)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Demo data endpoint
+@app.post("/api/demo/load-sample")
+async def load_sample_data(
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Load sample legal documents and emails for demo"""
+    try:
+        if not FULL_FEATURES:
+            return {
+                "success": True,
+                "message": "Sample data loaded (demo mode)",
+                "documents_loaded": 3,
+                "emails_loaded": 5
+            }
+        
+        # Get or create client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            client = Client(
+                name=user["name"],
+                email=user["email"],
+                company=user.get("org", "Individual"),
+                description=f"Demo user: {user['name']}"
+            )
+            db.add(client)
+            db.commit()
+            db.refresh(client)
+        
+        # Initialize services
+        doc_service = DocumentService()
+        vector_service = VectorService()
+        gmail_service = GmailService()
+        
+        documents_loaded = 0
+        emails_loaded = 0
+        
+        # Load sample documents
+        try:
             sample_docs = doc_service.get_sample_documents()
-            processed_docs = []
             
             for sample_doc in sample_docs:
-                # Check if document already exists
-                existing_doc = db.query(Document).filter(
-                    Document.client_id == client_id,
+                # Check if already exists
+                existing = db.query(Document).filter(
+                    Document.client_id == client.id,
                     Document.original_filename == sample_doc["original_filename"]
                 ).first()
                 
-                if existing_doc:
-                    processed_docs.append(existing_doc.to_dict())
+                if existing:
                     continue
                 
-                # Create document record
+                # Create document
                 document = Document(
-                    client_id=client_id,
+                    client_id=client.id,
                     filename=sample_doc["filename"],
                     original_filename=sample_doc["original_filename"],
                     file_type=sample_doc["file_type"],
@@ -401,13 +563,13 @@ async def upload_sample_docs(client_id: int, db: Session = Depends(get_db)):
                 
                 # Add to vector store
                 chunk_ids = vector_service.add_document_to_vector_store(
-                    client_id=client_id,
+                    client_id=client.id,
                     document_id=document.id,
                     text=sample_doc["content"],
                     metadata={
                         "filename": document.original_filename,
                         "file_type": document.file_type,
-                        "created_at": document.created_at.isoformat(),
+                        "user_email": user["email"],
                         "sample_document": True
                     }
                 )
@@ -416,138 +578,28 @@ async def upload_sample_docs(client_id: int, db: Session = Depends(get_db)):
                     document.chunk_ids = json.dumps(chunk_ids)
                     db.commit()
                 
-                processed_docs.append(document.to_dict())
-            
-            print(f"✅ REAL: Processed {len(processed_docs)} documents into vector store")
-            
-            return {
-                "success": True,
-                "message": f"REAL: Processed {len(processed_docs)} documents with vector embeddings",
-                "documents": processed_docs
-            }
-        else:
-            # Fallback mock response
-            print(f"⚠️ MOCK: Sample documents for client {client_id}")
-            return {
-                "success": True,
-                "message": f"Uploaded 3 sample documents for client {client_id} (demo mode)",
-                "documents": [
-                    {"id": 1, "original_filename": "Board Approval - Equity Incentive Plan.pdf", "processing_status": "completed"},
-                    {"id": 2, "original_filename": "Advisor Agreement Template.docx", "processing_status": "completed"},
-                    {"id": 3, "original_filename": "Equity Incentive Plan (EIP).pdf", "processing_status": "completed"}
-                ]
-            }
-    except Exception as e:
-        print(f"❌ Document upload error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Document upload failed"
-        }
-
-@app.get("/api/documents/{client_id}/documents")
-async def get_documents(client_id: int, db: Session = Depends(get_db)):
-    """Get all documents for a client with REAL data"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            documents = db.query(Document).filter(Document.client_id == client_id).all()
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "total_documents": len(documents),
-                "documents": [doc.to_dict() for doc in documents]
-            }
-        else:
-            # Fallback
-            if client_id == 1:
-                documents = [
-                    {"id": 1, "original_filename": "Board Approval - Equity Incentive Plan.pdf", "processing_status": "completed"},
-                    {"id": 2, "original_filename": "Advisor Agreement Template.docx", "processing_status": "completed"},
-                    {"id": 3, "original_filename": "Equity Incentive Plan (EIP).pdf", "processing_status": "completed"}
-                ]
-            else:
-                documents = []
-            
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "total_documents": len(documents),
-                "documents": documents
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get documents error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/documents/{client_id}/upload")
-async def upload_document(client_id: int, db: Session = Depends(get_db)):
-    """Upload document endpoint"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            # Real file upload would be implemented here
-            # For now, suggest using sample documents
-            return {
-                "success": True,
-                "message": "File upload feature ready - use 'Load Lexsy Documents' for demo",
-                "note": "Real file upload requires multipart form data handling"
-            }
-        else:
-            return {
-                "success": True,
-                "message": "Document upload feature ready - use sample documents for demo",
-                "note": "Full file upload available in complete version"
-            }
-    except Exception as e:
-        print(f"❌ Upload error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Upload failed"
-        }
-# Email endpoints with REAL processing
-@app.post("/api/emails/{client_id}/ingest-sample-emails")
-async def ingest_sample_emails(client_id: int, db: Session = Depends(get_db)):
-    """Ingest sample emails with REAL processing"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            print(f"✅ REAL: Processing sample emails for client {client_id}")
-            
-            # Initialize services
-            gmail_service = GmailService()
-            vector_service = VectorService()
-            
-            # Get sample emails
+                documents_loaded += 1
+        
+        except Exception as e:
+            print(f"Error loading sample documents: {e}")
+        
+        # Load sample emails
+        try:
             sample_emails = gmail_service.get_lexsy_sample_emails()
-            processed_emails = []
             
             for email_data in sample_emails:
-                # Check if email already exists
-                existing_email = db.query(Email).filter(
+                # Check if already exists
+                existing = db.query(Email).filter(
                     Email.gmail_message_id == email_data["id"],
-                    Email.client_id == client_id
+                    Email.client_id == client.id
                 ).first()
                 
-                if existing_email:
-                    processed_emails.append(existing_email.to_dict())
+                if existing:
                     continue
                 
-                # Parse date
-                date_sent = None
-                if email_data.get("date"):
-                    try:
-                        date_sent = datetime.fromisoformat(email_data["date"].replace("Z", "+00:00"))
-                    except:
-                        pass
-                
-                # Create email record
+                # Create email
                 email = Email(
-                    client_id=client_id,
+                    client_id=client.id,
                     gmail_message_id=email_data["id"],
                     gmail_thread_id=email_data["thread_id"],
                     subject=email_data["subject"],
@@ -555,8 +607,7 @@ async def ingest_sample_emails(client_id: int, db: Session = Depends(get_db)):
                     recipient=email_data["recipient"],
                     body=email_data["body"],
                     snippet=email_data["snippet"],
-                    date_sent=date_sent,
-                    labels=json.dumps([]),
+                    date_sent=datetime.fromisoformat(email_data["date"].replace("Z", "+00:00")) if email_data.get("date") else None,
                     is_processed=False
                 )
                 
@@ -568,7 +619,7 @@ async def ingest_sample_emails(client_id: int, db: Session = Depends(get_db)):
                 email_content = f"Subject: {email_data['subject']}\nFrom: {email_data['sender']}\nTo: {email_data['recipient']}\n\n{email_data['body']}"
                 
                 chunk_ids = vector_service.add_email_to_vector_store(
-                    client_id=client_id,
+                    client_id=client.id,
                     email_id=email.id,
                     email_content=email_content,
                     metadata={
@@ -576,6 +627,7 @@ async def ingest_sample_emails(client_id: int, db: Session = Depends(get_db)):
                         "sender": email_data["sender"],
                         "recipient": email_data["recipient"],
                         "thread_id": email_data["thread_id"],
+                        "user_email": user["email"],
                         "sample_email": True
                     }
                 )
@@ -585,424 +637,112 @@ async def ingest_sample_emails(client_id: int, db: Session = Depends(get_db)):
                     email.is_processed = True
                     db.commit()
                 
-                processed_emails.append(email.to_dict())
-            
-            print(f"✅ REAL: Processed {len(processed_emails)} emails into vector store")
-            
-            return {
-                "success": True,
-                "message": f"REAL: Processed {len(processed_emails)} emails with vector embeddings",
-                "emails_processed": len(processed_emails),
-                "emails": processed_emails
-            }
-        else:
-            # Fallback
-            print(f"⚠️ MOCK: Sample emails for client {client_id}")
-            return {
-                "success": True,
-                "message": f"Processed 5 sample emails for client {client_id} (demo mode)",
-                "emails_processed": 5
-            }
-    except Exception as e:
-        print(f"❌ Email ingestion error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Email ingestion failed"
-        }
-
-@app.get("/api/emails/{client_id}/emails")
-async def get_emails(client_id: int, db: Session = Depends(get_db)):
-    """Get emails for a client with REAL data"""
-    try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            emails = db.query(Email).filter(Email.client_id == client_id).order_by(Email.date_sent.asc()).all()
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "total_emails": len(emails),
-                "emails": [email.to_dict() for email in emails]
-            }
-        else:
-            # Fallback
-            if client_id == 1:
-                emails = [
-                    {"id": 1, "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com"},
-                    {"id": 2, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "legal@lexsy.com"},
-                    {"id": 3, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com"},
-                    {"id": 4, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "legal@lexsy.com"},
-                    {"id": 5, "subject": "Re: Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com"}
-                ]
-            else:
-                emails = []
-            
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "total_emails": len(emails),
-                "emails": emails
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Get emails error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-# Chat endpoints with REAL AI
-@app.post("/api/chat/{client_id}/ask")
-async def ask_question(client_id: int, request: ChatRequest, db: Session = Depends(get_db)):
-    """Ask a question with REAL AI processing"""
-    try:
-        if SERVICES_AVAILABLE and MODELS_AVAILABLE and db:
-            print(f"✅ REAL AI: Processing question for client {client_id}: {request.question}")
-            
-            # Check client exists
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            # Initialize AI service
-            ai_service = AIService()
-            
-            # Generate REAL AI response
-            response = ai_service.generate_response(
-                client_id=client_id,
-                question=request.question,
-                conversation_history=None
-            )
-            
-            if response["success"]:
-                print(f"✅ REAL AI: Generated response with {response['context_used']} sources")
+                emails_loaded += 1
                 
-                return {
-                    "success": True,
-                    "question": request.question,
-                    "answer": response["answer"],
-                    "sources": response["sources"],
-                    "context_used": response["context_used"],
-                    "tokens_used": response["tokens_used"],
-                    "response_time": response["response_time"]
-                }
-            else:
-                raise Exception(response.get("error", "AI processing failed"))
-        else:
-            # Fallback mock responses
-            print(f"⚠️ MOCK AI: Question for client {client_id}: {request.question}")
-            
-            question_lower = request.question.lower()
-            
-            if "alex and kristina" in question_lower:
-                answer = "The email conversation between Alex (Founder) and Kristina (Legal) discusses bringing on John Smith as a Strategic Advisor with a 15,000 RSA equity grant. The conversation covers vesting terms (2-year monthly, no cliff), tax considerations (RSAs vs options), documentation requirements (Board Consent, Advisor Agreement), and timeline (ready by Friday July 25th)."
-                sources = [
-                    {"type": "email", "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com", "similarity_score": 0.95}
-                ]
-            elif "vesting" in question_lower:
-                answer = "The vesting terms discussed are **2-year monthly vesting with no cliff**, effective from July 22, 2025. John Smith's 15,000 RSAs will vest monthly over 24 months (1/24th each month)."
-                sources = [
-                    {"type": "email", "subject": "Re: Advisor Equity Grant", "sender": "legal@lexsy.com", "similarity_score": 0.92}
-                ]
-            else:
-                answer = f"I can help answer questions about the Lexsy advisor equity discussion between Alex and Kristina. The AI processing is working but needs document/email data loaded first for full context."
-                sources = [
-                    {"type": "demo", "filename": "Sample response", "similarity_score": 0.75}
-                ]
-            
-            return {
-                "success": True,
-                "question": request.question,
-                "answer": answer,
-                "sources": sources,
-                "context_used": len(sources),
-                "tokens_used": 100,
-                "response_time": 0.5
-            }
-    except HTTPException:
-        raise
+        except Exception as e:
+            print(f"Error loading sample emails: {e}")
+        
+        return {
+            "success": True,
+            "message": f"Sample data loaded successfully",
+            "documents_loaded": documents_loaded,
+            "emails_loaded": emails_loaded
+        }
+        
     except Exception as e:
-        print(f"❌ Chat error: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
-@app.get("/api/chat/{client_id}/conversations")
-async def get_conversations(client_id: int, db: Session = Depends(get_db)):
-    """Get conversation history for a client"""
+        raise HTTPException(status_code=500, detail=f"Failed to load sample data: {str(e)}")
+
+# Clear user data
+@app.post("/api/user/clear-data")
+async def clear_user_data(
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Clear all data for the authenticated user"""
     try:
-        if MODELS_AVAILABLE and db:
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-            
-            conversations = db.query(Conversation).filter(
-                Conversation.client_id == client_id
-            ).order_by(Conversation.created_at.desc()).limit(50).all()
-            
-            return {
-                "client_id": client_id,
-                "client_name": client.name,
-                "total_conversations": len(conversations),
-                "conversations": [conv.to_dict() for conv in conversations]
-            }
-        else:
-            # Fallback
-            return {
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc." if client_id == 1 else "TechCorp LLC",
-                "total_conversations": 0,
-                "conversations": []
-            }
-    except HTTPException:
-        raise
+        if not FULL_FEATURES:
+            return {"success": True, "message": "Data cleared (demo mode)"}
+        
+        # Get user's client
+        client = db.query(Client).filter(Client.email == user["email"]).first()
+        if not client:
+            return {"success": True, "message": "No data to clear"}
+        
+        # Delete documents and files
+        documents = db.query(Document).filter(Document.client_id == client.id).all()
+        for doc in documents:
+            # Delete file
+            if doc.file_path and os.path.exists(doc.file_path):
+                try:
+                    os.remove(doc.file_path)
+                except:
+                    pass
+            # Delete from database
+            db.delete(doc)
+        
+        # Delete emails
+        emails = db.query(Email).filter(Email.client_id == client.id).all()
+        for email in emails:
+            db.delete(email)
+        
+        # Delete conversations
+        conversations = db.query(Conversation).filter(Conversation.client_id == client.id).all()
+        for conv in conversations:
+            db.delete(conv)
+        
+        db.commit()
+        
+        # Clear vector store
+        try:
+            vector_service = VectorService()
+            vector_service.reset_client_data(client.id)
+        except Exception as e:
+            print(f"Error clearing vector data: {e}")
+        
+        return {
+            "success": True,
+            "message": "All user data cleared successfully"
+        }
+        
     except Exception as e:
-        print(f"❌ Get conversations error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-# Gmail auth endpoints
-@app.get("/api/auth/gmail/auth-url")
-async def get_gmail_auth_url():
-    """Get Gmail OAuth authorization URL"""
-    try:
-        if SERVICES_AVAILABLE:
-            gmail_service = GmailService()
-            auth_url = gmail_service.get_auth_url()
-            return {
-                "success": True,
-                "auth_url": auth_url,
-                "message": "Redirect user to this URL for Gmail authentication"
-            }
-        else:
-            # Fallback demo URL
-            return {
-                "success": True,
-                "auth_url": "https://accounts.google.com/o/oauth2/auth?client_id=demo&redirect_uri=callback&scope=gmail.readonly",
-                "message": "Gmail OAuth integration configured - demo URL (add real credentials for production)"
-            }
-    except Exception as e:
-        print(f"❌ Gmail auth URL error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Failed to generate Gmail auth URL"
-        }
 
-@app.get("/api/auth/gmail/callback")
-async def gmail_oauth_callback(code: str, state: str = None, error: str = None):
-    """Handle Gmail OAuth callback"""
-    try:
-        if error:
-            raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
-        
-        if not code:
-            raise HTTPException(status_code=400, detail="Authorization code is required")
-        
-        if SERVICES_AVAILABLE:
-            gmail_service = GmailService()
-            result = gmail_service.authenticate_with_code(code)
-            
-            if result.get("success"):
-                return {
-                    "success": True,
-                    "message": "Gmail authentication successful",
-                    "user_email": result.get("email"),
-                    "messages_total": result.get("messages_total", 0)
-                }
-            else:
-                raise HTTPException(status_code=400, detail=result.get("error", "Authentication failed"))
-        else:
-            # Fallback
-            return {
-                "success": True,
-                "message": "Gmail authentication successful (demo mode)",
-                "user_email": "demo@lexsy.com"
-            }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ Gmail callback error: {e}")
-        raise HTTPException(status_code=500, detail=f"Authentication failed: {str(e)}")
-
-@app.get("/api/auth/gmail/status")
-async def get_gmail_status():
-    """Check Gmail authentication status"""
-    try:
-        if SERVICES_AVAILABLE:
-            gmail_service = GmailService()
-            if gmail_service.service is None:
-                return {
-                    "authenticated": False,
-                    "message": "Gmail not authenticated"
-                }
-            
-            # Test connection
-            profile = gmail_service.service.users().getProfile(userId='me').execute()
-            
-            return {
-                "authenticated": True,
-                "email": profile.get('emailAddress'),
-                "messages_total": profile.get('messagesTotal', 0)
-            }
-        else:
-            # Fallback
-            return {
-                "authenticated": True,
-                "email": "demo@lexsy.com",
-                "message": "Gmail integration ready (demo mode)"
-            }
-    except Exception as e:
-        print(f"❌ Gmail status error: {e}")
-        return {
-            "authenticated": False,
-            "error": str(e)
-        }
-
-# App interface endpoint  
-@app.get("/app", response_class=HTMLResponse)
-async def serve_frontend():
-    """Serve the full application interface"""
-    try:
-        # Try to load the actual index.html file first
-        if os.path.exists("index.html"):
-            with open("index.html", 'r', encoding='utf-8') as file:
-                html_content = file.read()
-                print("✅ Serving index.html from /app")
-                return HTMLResponse(content=html_content)
-    except Exception as e:
-        print(f"⚠️ Could not load index.html: {e}")
-    
-    # Fallback to redirect to root
-    return HTMLResponse(content="""
-    <script>window.location.href = '/';</script>
-    <p>Redirecting to main interface...</p>
-    """)
-
-# Debug environment
-@app.get("/debug/env")
-async def debug_env():
-    """Debug environment variables"""
-    
-    # Get all environment variables
-    all_vars = dict(os.environ)
-    
-    # Check specific variables
-    openai_key = os.getenv("OPENAI_API_KEY")
-    google_id = os.getenv("GOOGLE_CLIENT_ID") 
-    google_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    
+# User session info
+@app.get("/api/user/info")
+async def get_user_info(user = Depends(get_current_user)):
+    """Get current user information"""
     return {
-        "openai_api_key_exists": openai_key is not None,
-        "openai_key_length": len(openai_key) if openai_key else 0,
-        "google_client_id_exists": google_id is not None,
-        "google_secret_exists": google_secret is not None,
-        "total_env_vars": len(all_vars),
-        "railway_vars": [k for k in all_vars.keys() if not k.startswith("_") and not k.startswith("PATH")],
-        "debug_info": {
-            "PORT": os.getenv("PORT"),
-            "RAILWAY_ENVIRONMENT": os.getenv("RAILWAY_ENVIRONMENT"),
-            "PYTHON_VERSION": os.getenv("PYTHON_VERSION")
-        },
-        "feature_flags": {
-            "FULL_FEATURES": FULL_FEATURES,
-            "SERVICES_AVAILABLE": SERVICES_AVAILABLE,
-            "MODELS_AVAILABLE": MODELS_AVAILABLE
-        }
+        "user": user,
+        "session_active": True,
+        "features_available": FULL_FEATURES
     }
 
-# Testing endpoints
-@app.get("/api/test/services")
-async def test_services():
-    """Test all services availability"""
-    results = {
-        "config": False,
-        "database": False,
-        "document_service": False,
-        "vector_service": False,
-        "ai_service": False,
-        "gmail_service": False,
-        "models": False
-    }
-    
-    try:
-        from config import settings
-        results["config"] = True
-    except:
-        pass
-    
-    try:
-        from database import init_db, get_db
-        results["database"] = True
-    except:
-        pass
-    
-    try:
-        from services.document_service import DocumentService
-        results["document_service"] = True
-    except:
-        pass
-    
-    try:
-        from services.vector_service import VectorService
-        results["vector_service"] = True
-    except:
-        pass
-    
-    try:
-        from services.ai_service import AIService
-        results["ai_service"] = True
-    except:
-        pass
-    
-    try:
-        from services.gmail_service import GmailService
-        results["gmail_service"] = True
-    except:
-        pass
-    
-    try:
-        from models.client import Client
-        from models.document import Document
-        from models.email import Email
-        from models.conversation import Conversation
-        results["models"] = True
-    except:
-        pass
-    
+# Admin endpoint - list active users (for monitoring)
+@app.get("/api/admin/users")
+async def list_active_users():
+    """List active user sessions (admin only)"""
+    # In production, add proper admin authentication
     return {
-        "service_availability": results,
-        "all_services_available": all(results.values()),
-        "missing_services": [k for k, v in results.items() if not v],
-        "environment": {
-            "FULL_FEATURES": FULL_FEATURES,
-            "SERVICES_AVAILABLE": SERVICES_AVAILABLE,
-            "MODELS_AVAILABLE": MODELS_AVAILABLE
-        }
-    }
-@app.get("/api/chat/test")
-async def test_chat_endpoint():
-    """Test chat endpoint is working"""
-    return {
-        "success": True,
-        "message": "Chat endpoint is properly registered",
-        "available_endpoints": {
-            "ask_question": "/api/chat/{client_id}/ask",
-            "conversations": "/api/chat/{client_id}/conversations"
-        }
-    }
-# Error handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Global exception handler"""
-    print(f"❌ Global error: {exc}")
-    return {
-        "error": "Internal server error",
-        "detail": str(exc),
-        "path": str(request.url),
-        "feature_status": {
-            "full_features": FULL_FEATURES,
-            "services": SERVICES_AVAILABLE,
-            "models": MODELS_AVAILABLE
-        }
+        "active_sessions": len(user_sessions),
+        "users": [
+            {
+                "email": session["email"],
+                "name": session["name"],
+                "last_active": session["last_active"]
+            }
+            for session in user_sessions.values()
+        ]
     }
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    print(f"🚀 Starting AI Legal Assistant on port {port}")
+    print(f"📊 Features available: {FULL_FEATURES}")
+    print(f"🔧 Environment: {'Production' if not os.getenv('DEBUG') else 'Development'}")
+    
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=port,
+        reload=False  # Disable reload in production
+    )
