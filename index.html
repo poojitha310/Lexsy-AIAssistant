@@ -3,25 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lexsy AI Assistant - Legal Document & Email Analysis Platform</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>AI Legal Assistant - Document & Email Analysis</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
-        :root {
-            --primary-navy: #1e293b;
-            --secondary-slate: #64748b;
-            --accent-gold: #f59e0b;
-            --success-green: #059669;
-            --error-red: #dc2626;
-            --warning-orange: #f97316;
-            --bg-light: #f8fafc;
-            --bg-white: #ffffff;
-            --text-primary: #0f172a;
-            --text-secondary: #475569;
-            --border-light: #e2e8f0;
-            --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -29,23 +14,23 @@
         }
 
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-light);
-            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
             line-height: 1.6;
         }
 
         .header {
-            background: linear-gradient(135deg, var(--primary-navy), var(--secondary-slate));
+            background: linear-gradient(135deg, #1e293b, #475569);
             color: white;
-            padding: 1.5rem 0;
-            box-shadow: var(--shadow);
+            padding: 1rem 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .header-content {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 0 2rem;
+            padding: 0 1rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -54,90 +39,89 @@
         .logo {
             display: flex;
             align-items: center;
+            gap: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
             gap: 1rem;
         }
 
-        .logo i {
-            font-size: 2rem;
-            color: var(--accent-gold);
-        }
-
-        .logo h1 {
-            font-size: 1.8rem;
-            font-weight: 700;
-        }
-
-        .logo p {
-            font-size: 0.9rem;
-            opacity: 0.9;
-            margin-top: 0.25rem;
-        }
-
-        .status-indicator {
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #3b82f6;
             display: flex;
             align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+
+        .auth-section {
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            margin: 2rem auto;
+        }
+
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
             gap: 0.5rem;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 0.5rem 1rem;
-            border-radius: 2rem;
-            font-size: 0.9rem;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .form-input {
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 2rem;
-        }
-
-        .assignment-info {
-            background: var(--bg-white);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: var(--shadow);
-            border-left: 4px solid var(--accent-gold);
-        }
-
-        .assignment-info h2 {
-            color: var(--primary-navy);
-            margin-bottom: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .requirements-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .requirement-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem;
-            background: var(--bg-light);
-            border-radius: 0.5rem;
-        }
-
-        .requirement-item.completed {
-            background: rgba(5, 150, 105, 0.1);
-            color: var(--success-green);
+            padding: 2rem 1rem;
         }
 
         .main-grid {
             display: grid;
-            grid-template-columns: 350px 1fr;
+            grid-template-columns: 320px 1fr;
             gap: 2rem;
         }
 
         .sidebar {
-            background: var(--bg-white);
-            border-radius: 1rem;
+            background: white;
+            border-radius: 8px;
             padding: 1.5rem;
-            box-shadow: var(--shadow);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             height: fit-content;
             position: sticky;
             top: 2rem;
@@ -148,96 +132,51 @@
         }
 
         .section h3 {
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: 600;
             margin-bottom: 1rem;
-            color: var(--text-primary);
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            color: #374151;
         }
 
-        /* Client Selection */
-        .client-option {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem;
-            border: 2px solid var(--border-light);
-            border-radius: 0.5rem;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .client-option:hover {
-            border-color: var(--accent-gold);
-            background: rgba(245, 158, 11, 0.05);
-        }
-
-        .client-option.active {
-            border-color: var(--accent-gold);
-            background: rgba(245, 158, 11, 0.1);
-            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
-        }
-
-        .client-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--primary-navy), var(--secondary-slate));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            margin-right: 0.75rem;
-        }
-
-        /* File Upload Zone */
         .upload-zone {
-            border: 2px dashed var(--border-light);
-            border-radius: 0.75rem;
+            border: 2px dashed #cbd5e1;
+            border-radius: 6px;
             padding: 2rem;
             text-align: center;
             cursor: pointer;
-            transition: all 0.3s ease;
-            background: var(--bg-light);
+            transition: all 0.3s;
+            background: #f8fafc;
             margin-bottom: 1rem;
         }
 
-        .upload-zone:hover,
-        .upload-zone.dragover {
-            border-color: var(--accent-gold);
-            background: rgba(245, 158, 11, 0.05);
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: #3b82f6;
+            background: #eff6ff;
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(245, 158, 11, 0.15);
         }
 
-        .upload-content {
-            pointer-events: none;
-        }
-
-        .upload-link {
-            color: var(--accent-gold);
-            text-decoration: underline;
-            cursor: pointer;
-            font-weight: 500;
-            pointer-events: auto;
+        .upload-icon {
+            font-size: 2.5rem;
+            color: #3b82f6;
+            margin-bottom: 1rem;
         }
 
         .upload-progress {
             margin-top: 1rem;
-            max-height: 300px;
+            max-height: 200px;
             overflow-y: auto;
         }
 
         .upload-item {
             background: white;
-            border: 1px solid var(--border-light);
-            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
             padding: 1rem;
             margin-bottom: 0.5rem;
-            box-shadow: var(--shadow);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
         .upload-info {
@@ -249,18 +188,18 @@
 
         .filename {
             font-weight: 500;
-            color: var(--text-primary);
+            font-size: 0.9rem;
         }
 
         .file-size {
             font-size: 0.8rem;
-            color: var(--text-secondary);
+            color: #6b7280;
         }
 
         .progress-bar {
             width: 100%;
             height: 6px;
-            background: var(--border-light);
+            background: #e5e7eb;
             border-radius: 3px;
             overflow: hidden;
             margin-bottom: 0.5rem;
@@ -268,58 +207,59 @@
 
         .progress-fill {
             height: 100%;
-            background: var(--accent-gold);
+            background: #3b82f6;
             transition: width 0.3s ease;
             width: 0%;
         }
 
         .upload-status {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             font-weight: 500;
         }
 
-        .status-success { color: var(--success-green); }
-        .status-error { color: var(--error-red); }
-        .status-processing { color: var(--accent-gold); }
+        .status-success { color: #059669; }
+        .status-error { color: #dc2626; }
+        .status-processing { color: #d97706; }
 
-        /* Buttons */
         .btn {
             width: 100%;
-            padding: 0.75rem 1rem;
+            padding: 0.75rem;
             border: none;
-            border-radius: 0.5rem;
+            border-radius: 6px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            margin-bottom: 0.5rem;
             font-size: 0.9rem;
-            margin-bottom: 0.75rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .btn-primary {
-            background: var(--accent-gold);
+            background: #3b82f6;
             color: white;
         }
 
-        .btn-primary:hover {
-            background: #d97706;
+        .btn-primary:hover:not(:disabled) {
+            background: #2563eb;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
         }
 
         .btn-secondary {
-            background: var(--bg-light);
-            color: var(--text-secondary);
-            border: 1px solid var(--border-light);
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #e2e8f0;
         }
 
-        .btn-secondary:hover {
-            background: var(--bg-white);
-            border-color: var(--accent-gold);
-            color: var(--accent-gold);
+        .btn-secondary:hover:not(:disabled) {
+            background: #e2e8f0;
         }
 
         .btn-gmail {
@@ -327,39 +267,32 @@
             color: white;
         }
 
-        .btn-gmail:hover {
+        .btn-gmail:hover:not(:disabled) {
             background: #3367d6;
         }
 
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none !important;
-        }
-
-        /* Main Content */
         .main-content {
-            background: var(--bg-white);
-            border-radius: 1rem;
-            box-shadow: var(--shadow);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             overflow: hidden;
         }
 
         .tab-nav {
             display: flex;
-            background: var(--bg-light);
-            border-bottom: 1px solid var(--border-light);
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
         }
 
         .tab {
             flex: 1;
-            padding: 1rem 1.5rem;
+            padding: 1rem;
             background: none;
             border: none;
             cursor: pointer;
             font-weight: 500;
-            color: var(--text-secondary);
-            transition: all 0.2s ease;
+            color: #64748b;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -367,61 +300,35 @@
         }
 
         .tab.active {
-            background: var(--bg-white);
-            color: var(--text-primary);
-            border-bottom: 3px solid var(--accent-gold);
+            background: white;
+            color: #1e293b;
+            border-bottom: 3px solid #3b82f6;
         }
 
         .tab-content {
             padding: 2rem;
             display: none;
-            min-height: 600px;
+            min-height: 500px;
         }
 
         .tab-content.active {
             display: block;
         }
 
-        /* Chat Interface */
         .chat-container {
-            height: 550px;
+            height: 500px;
             display: flex;
             flex-direction: column;
-        }
-
-        .chat-suggestions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .suggestion-chip {
-            background: var(--bg-light);
-            border: 1px solid var(--border-light);
-            padding: 0.5rem 0.75rem;
-            border-radius: 1.5rem;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            color: var(--text-secondary);
-        }
-
-        .suggestion-chip:hover {
-            background: var(--accent-gold);
-            color: white;
-            border-color: var(--accent-gold);
-            transform: translateY(-1px);
         }
 
         .chat-messages {
             flex: 1;
             overflow-y: auto;
             padding: 1rem;
-            background: var(--bg-light);
-            border-radius: 0.75rem;
+            background: #f8fafc;
+            border-radius: 6px;
             margin-bottom: 1rem;
-            border: 1px solid var(--border-light);
+            border: 1px solid #e2e8f0;
         }
 
         .message {
@@ -441,50 +348,50 @@
         }
 
         .message-avatar {
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             font-weight: 600;
             flex-shrink: 0;
         }
 
         .user .message-avatar {
-            background: var(--accent-gold);
+            background: #3b82f6;
             color: white;
         }
 
         .assistant .message-avatar {
-            background: var(--primary-navy);
+            background: #1e293b;
             color: white;
         }
 
         .message-content {
             flex: 1;
-            max-width: 75%;
+            max-width: 80%;
         }
 
         .message-bubble {
             padding: 1rem 1.25rem;
-            border-radius: 1.25rem;
+            border-radius: 12px;
             word-wrap: break-word;
             line-height: 1.5;
         }
 
         .user .message-bubble {
-            background: var(--accent-gold);
+            background: #3b82f6;
             color: white;
-            border-bottom-right-radius: 0.5rem;
+            border-bottom-right-radius: 4px;
         }
 
         .assistant .message-bubble {
             background: white;
-            border: 1px solid var(--border-light);
-            border-bottom-left-radius: 0.5rem;
-            box-shadow: var(--shadow);
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
         .message-sources {
@@ -494,13 +401,13 @@
 
         .source-tag {
             display: inline-block;
-            background: var(--bg-light);
-            border: 1px solid var(--border-light);
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
             padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
+            border-radius: 4px;
             margin-right: 0.5rem;
             margin-bottom: 0.25rem;
-            color: var(--text-secondary);
+            color: #64748b;
         }
 
         .chat-input-container {
@@ -511,135 +418,119 @@
 
         .chat-input {
             flex: 1;
-            padding: 0.75rem 1rem;
-            border: 1px solid var(--border-light);
-            border-radius: 0.75rem;
-            font-size: 1rem;
+            padding: 0.75rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
             resize: none;
-            font-family: inherit;
             min-height: 44px;
             max-height: 120px;
+            font-family: inherit;
         }
 
         .chat-input:focus {
             outline: none;
-            border-color: var(--accent-gold);
-            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
         .send-btn {
-            padding: 0.75rem 1.25rem;
-            background: var(--accent-gold);
+            padding: 0.75rem 1rem;
+            background: #3b82f6;
             color: white;
             border: none;
-            border-radius: 0.75rem;
+            border-radius: 6px;
             cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s ease;
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        .send-btn:hover {
-            background: #d97706;
-            transform: translateY(-1px);
+        .send-btn:hover:not(:disabled) {
+            background: #2563eb;
         }
 
         .send-btn:disabled {
-            background: var(--text-secondary);
+            background: #94a3b8;
             cursor: not-allowed;
-            transform: none;
         }
 
-        /* Content Grids */
-        .content-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .content-card {
-            border: 1px solid var(--border-light);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            transition: all 0.2s ease;
-            background: white;
-        }
-
-        .content-card:hover {
-            border-color: var(--accent-gold);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-            transform: translateY(-2px);
-        }
-
-        .content-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-            color: var(--accent-gold);
-        }
-
-        .content-card h4 {
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .content-meta {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-top: 0.5rem;
-        }
-
-        /* Email Styles */
-        .email-item {
-            border: 1px solid var(--border-light);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            background: white;
-            box-shadow: var(--shadow);
-        }
-
-        .email-header {
+        .content-list {
             display: flex;
-            justify-content: between;
-            align-items: start;
-            margin-bottom: 1rem;
-            padding-bottom: 0.75rem;
-            border-bottom: 1px solid var(--border-light);
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
         }
 
-        .email-subject {
+        .content-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 1rem;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .content-item:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+
+        .content-title {
             font-weight: 600;
-            color: var(--text-primary);
+            color: #1e293b;
             margin-bottom: 0.25rem;
         }
 
-        .email-participants {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
+        .content-meta {
+            font-size: 0.875rem;
+            color: #64748b;
         }
 
-        .email-date {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
+        .status-indicator {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
         }
 
-        .email-body {
-            white-space: pre-wrap;
-            line-height: 1.6;
-            font-size: 0.95rem;
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
         }
 
-        /* Alerts */
+        .empty-state i {
+            font-size: 3rem;
+            color: #cbd5e1;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 0.5rem;
+            color: #475569;
+        }
+
+        .empty-state p {
+            color: #64748b;
+            margin-bottom: 1.5rem;
+        }
+
         .alert {
-            padding: 1rem 1.25rem;
-            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
             margin-bottom: 1rem;
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.5rem;
             animation: slideIn 0.3s ease;
         }
 
@@ -649,82 +540,72 @@
         }
 
         .alert-success {
-            background: rgba(5, 150, 105, 0.1);
-            color: var(--success-green);
-            border: 1px solid rgba(5, 150, 105, 0.2);
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
         }
 
         .alert-error {
-            background: rgba(220, 38, 38, 0.1);
-            color: var(--error-red);
-            border: 1px solid rgba(220, 38, 38, 0.2);
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
         }
 
-        .alert-warning {
-            background: rgba(249, 115, 22, 0.1);
-            color: var(--warning-orange);
-            border: 1px solid rgba(249, 115, 22, 0.2);
+        .alert-info {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
         }
 
-        /* Loading */
-        .loading {
+        .typing-indicator {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 3rem;
-            color: var(--text-secondary);
+            gap: 0.5rem;
+            color: #64748b;
+            font-style: italic;
         }
 
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid var(--border-light);
-            border-top: 4px solid var(--accent-gold);
+        .typing-dots {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 1rem;
+            background: #64748b;
+            animation: typing 1.4s infinite ease-in-out;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
         }
 
-        /* Responsive */
-        @media (max-width: 1024px) {
+        @media (max-width: 768px) {
             .main-grid {
                 grid-template-columns: 1fr;
                 gap: 1rem;
             }
-            
+
             .sidebar {
                 position: static;
             }
-        }
 
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                gap: 1rem;
-                text-align: center;
-            }
-            
             .container {
                 padding: 1rem;
             }
-            
-            .requirements-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .tab {
-                padding: 0.75rem;
-                font-size: 0.85rem;
-            }
-            
+
             .chat-container {
                 height: 400px;
+            }
+
+            .auth-section {
+                margin: 1rem;
             }
         }
     </style>
@@ -734,111 +615,86 @@
     <header class="header">
         <div class="header-content">
             <div class="logo">
-                <i class="fas fa-gavel"></i>
-                <div>
-                    <h1>Lexsy AI Assistant</h1>
-                    <p>Legal Document & Email Analysis Platform</p>
-                </div>
+                <i class="fas fa-scale-balanced"></i>
+                <span>AI Legal Assistant</span>
             </div>
-            <div class="status-indicator">
-                <i class="fas fa-circle" style="color: #10b981; font-size: 0.5rem;"></i>
-                <span id="connectionStatus">System Ready</span>
+            <div class="user-info" id="userInfo" style="display: none;">
+                <span id="userName">User</span>
+                <div class="user-avatar" id="userAvatar">U</div>
+                <button onclick="logout()" style="background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">
+                    Logout
+                </button>
             </div>
         </div>
     </header>
 
-    <div class="container">
-        <!-- Assignment Requirements Overview -->
-        <div class="assignment-info">
-            <h2><i class="fas fa-tasks"></i> Assignment Requirements Status</h2>
-            <p>AI Assistant Panel Prototype - All core requirements implemented and ready for demo</p>
-            <div class="requirements-grid">
-                <div class="requirement-item completed">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Gmail OAuth Integration</span>
-                </div>
-                <div class="requirement-item completed">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Document Upload & Processing</span>
-                </div>
-                <div class="requirement-item completed">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Vector Search & Embeddings</span>
-                </div>
-                <div class="requirement-item completed">
-                    <i class="fas fa-check-circle"></i>
-                    <span>AI Chat Interface</span>
-                </div>
-                <div class="requirement-item completed">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Multi-Client Support</span>
-                </div>
-                <div class="requirement-item completed">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Deployed Web Application</span>
-                </div>
-            </div>
+    <!-- Authentication Section -->
+    <div id="authSection" class="auth-section">
+        <div class="auth-header">
+            <h2>Welcome to AI Legal Assistant</h2>
+            <p style="color: #6b7280; margin-top: 0.5rem;">Sign in to analyze documents and emails</p>
         </div>
+        <form class="auth-form" onsubmit="handleAuth(event)">
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-input" id="userName" placeholder="Your name" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-input" id="userEmail" placeholder="your@email.com" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Organization</label>
+                <input type="text" class="form-input" id="userOrg" placeholder="Law firm or company" required>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-sign-in-alt"></i>
+                Start Analysis
+            </button>
+        </form>
+    </div>
 
+    <!-- Main Application -->
+    <div id="mainApp" class="container" style="display: none;">
         <div class="main-grid">
             <!-- Sidebar -->
             <aside class="sidebar">
-                <!-- Client Selection -->
-                <div class="section">
-                    <h3><i class="fas fa-users"></i> Select Client</h3>
-                    <div id="clientList">
-                        <div class="client-option active" data-client-id="1">
-                            <div class="client-icon">L</div>
-                            <div>
-                                <div style="font-weight: 600;">Lexsy, Inc.</div>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);">AI Legal Tech Startup</div>
-                            </div>
-                        </div>
-                        <div class="client-option" data-client-id="2">
-                            <div class="client-icon">T</div>
-                            <div>
-                                <div style="font-weight: 600;">TechCorp LLC</div>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);">Enterprise Software</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Document Upload -->
                 <div class="section">
-                    <h3><i class="fas fa-cloud-upload-alt"></i> Upload Documents</h3>
+                    <h3><i class="fas fa-upload"></i> Upload Documents</h3>
                     <div class="upload-zone" id="uploadZone">
-                        <div class="upload-content">
-                            <i class="fas fa-cloud-upload-alt" style="font-size: 2.5rem; color: var(--accent-gold); margin-bottom: 1rem;"></i>
-                            <h4 style="margin-bottom: 0.5rem;">Drag & Drop Files</h4>
-                            <p>or <span class="upload-link" onclick="document.getElementById('fileInput').click()">browse files</span></p>
-                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;">
-                                PDF, DOCX, TXT (max 10MB)
-                            </p>
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
                         </div>
+                        <div style="font-weight: 500; margin-bottom: 0.25rem;">Drop files here</div>
+                        <div style="font-size: 0.875rem; color: #64748b;">PDF, DOCX, TXT • Max 10MB</div>
                         <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.txt" style="display: none;">
                     </div>
                     <div id="uploadProgress" class="upload-progress" style="display: none;"></div>
                 </div>
 
-                <!-- Action Buttons -->
+                <!-- Gmail Integration -->
+                <div class="section">
+                    <h3><i class="fab fa-google"></i> Gmail Integration</h3>
+                    <button class="btn btn-gmail" onclick="connectGmail()" id="gmailBtn">
+                        <i class="fab fa-google"></i>
+                        Connect Gmail
+                    </button>
+                    <div id="gmailStatus" style="display: none; margin-top: 0.5rem; font-size: 0.875rem; color: #059669;">
+                        <i class="fas fa-check-circle"></i> Gmail connected
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
                 <div class="section">
                     <h3><i class="fas fa-rocket"></i> Quick Actions</h3>
-                    <button class="btn btn-primary" onclick="initializeDemo()">
-                        <i class="fas fa-play"></i>
-                        Initialize Demo Data
+                    <button class="btn btn-secondary" onclick="loadSampleData()">
+                        <i class="fas fa-database"></i>
+                        Load Demo Data
                     </button>
-                    <button class="btn btn-secondary" onclick="loadSampleDocuments()">
-                        <i class="fas fa-file-pdf"></i>
-                        Load Lexsy Documents
-                    </button>
-                    <button class="btn btn-secondary" onclick="loadSampleEmails()">
-                        <i class="fas fa-envelope"></i>
-                        Load Email Thread
-                    </button>
-                    <button class="btn btn-gmail" onclick="connectGmail()">
-                        <i class="fab fa-google"></i>
-                        Connect Gmail OAuth
+                    <button class="btn btn-secondary" onclick="clearAllData()">
+                        <i class="fas fa-trash-alt"></i>
+                        Clear All Data
                     </button>
                 </div>
             </aside>
@@ -847,75 +703,34 @@
             <main class="main-content">
                 <nav class="tab-nav">
                     <button class="tab active" onclick="switchTab('chat')">
-                        <i class="fas fa-comments"></i>
-                        <span>AI Chat</span>
+                        <i class="fas fa-comments"></i> Chat Analysis
                     </button>
                     <button class="tab" onclick="switchTab('documents')">
-                        <i class="fas fa-file-alt"></i>
-                        <span>Documents</span>
+                        <i class="fas fa-file-alt"></i> Documents
                     </button>
                     <button class="tab" onclick="switchTab('emails')">
-                        <i class="fas fa-envelope"></i>
-                        <span>Email Thread</span>
-                    </button>
-                    <button class="tab" onclick="switchTab('demo')">
-                        <i class="fas fa-video"></i>
-                        <span>Demo Guide</span>
+                        <i class="fas fa-envelope"></i> Emails
                     </button>
                 </nav>
 
                 <!-- Chat Tab -->
                 <div id="chatTab" class="tab-content active">
-                    <div class="chat-suggestions">
-                        <div class="suggestion-chip" onclick="askQuestion('What equity grant was proposed for John Smith?')">
-                            John Smith equity grant details?
-                        </div>
-                        <div class="suggestion-chip" onclick="askQuestion('What are the vesting terms discussed in the emails?')">
-                            What are the vesting terms?
-                        </div>
-                        <div class="suggestion-chip" onclick="askQuestion('How many shares are available in our equity incentive plan?')">
-                            Available shares in EIP?
-                        </div>
-                        <div class="suggestion-chip" onclick="askQuestion('What documentation is needed for the advisor agreement?')">
-                            Required documentation?
-                        </div>
-                        <div class="suggestion-chip" onclick="askQuestion('What are the tax implications for RSAs vs stock options?')">
-                            Tax implications RSAs vs options?
-                        </div>
-                        <div class="suggestion-chip" onclick="askQuestion('Summarize the email conversation between Alex and Kristina')">
-                            Summarize email conversation
-                        </div>
-                    </div>
-
                     <div class="chat-container">
                         <div class="chat-messages" id="chatMessages">
                             <div class="message assistant">
                                 <div class="message-avatar">AI</div>
                                 <div class="message-content">
                                     <div class="message-bubble">
-                                        👋 Hello! I'm your Lexsy AI Assistant. I can analyze legal documents and email communications to help answer questions about:
-                                        <br><br>
-                                        📄 <strong>Document Analysis:</strong> Contracts, agreements, corporate governance<br>
-                                        📧 <strong>Email Intelligence:</strong> Legal discussions and decision tracking<br>
-                                        🔍 <strong>Context Search:</strong> Finding relevant information across all sources<br>
-                                        <br>
-                                        Try asking about the <strong>John Smith advisor equity grant</strong> or any other legal matters!
+                                        👋 Hello! I'm your AI legal assistant. Upload documents or connect Gmail to get started, then ask me questions about your legal matters. I can analyze contracts, agreements, email discussions, and help you find key information quickly.
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="chat-input-container">
-                            <textarea 
-                                id="chatInput" 
-                                class="chat-input" 
-                                placeholder="Ask about legal documents, email discussions, or specific cases..."
-                                onkeypress="handleKeyPress(event)"
-                                rows="1"
-                            ></textarea>
+                            <textarea id="chatInput" class="chat-input" placeholder="Ask about your documents or legal matters..." rows="1"></textarea>
                             <button class="send-btn" onclick="sendMessage()" id="sendBtn">
                                 <i class="fas fa-paper-plane"></i>
-                                <span>Send</span>
                             </button>
                         </div>
                     </div>
@@ -923,121 +738,19 @@
 
                 <!-- Documents Tab -->
                 <div id="documentsTab" class="tab-content">
-                    <div id="documentsContent">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                            <p>Loading documents...</p>
-                        </div>
+                    <div id="documentsContent" class="empty-state">
+                        <i class="fas fa-file-alt"></i>
+                        <h3>No Documents Yet</h3>
+                        <p>Upload PDF, DOCX, or TXT files to start analysis</p>
                     </div>
                 </div>
 
                 <!-- Emails Tab -->
                 <div id="emailsTab" class="tab-content">
-                    <div id="emailsContent">
-                        <div class="loading">
-                            <div class="spinner"></div>
-                            <p>Loading email thread...</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Demo Guide Tab -->
-                <div id="demoTab" class="tab-content">
-                    <div style="max-width: 800px;">
-                        <h2 style="margin-bottom: 1.5rem; color: var(--primary-navy);">
-                            <i class="fas fa-video"></i> Demo Recording Guide
-                        </h2>
-                        
-                        <div class="alert alert-warning">
-                            <i class="fas fa-info-circle"></i>
-                            <span>Follow this script for your 2-3 minute Loom recording to demonstrate all assignment requirements.</span>
-                        </div>
-
-                        <div style="background: var(--bg-light); padding: 2rem; border-radius: 0.75rem; margin-bottom: 2rem;">
-                            <h3 style="margin-bottom: 1rem;">📹 Demo Script (2-3 minutes)</h3>
-                            
-                            <div style="margin-bottom: 1.5rem;">
-                                <h4 style="color: var(--accent-gold); margin-bottom: 0.5rem;">⏱️ 0:00-0:30 - Introduction & Gmail Integration</h4>
-                                <ul style="margin-left: 1.5rem; line-height: 1.6;">
-                                    <li>Show the professional UI and explain the platform</li>
-                                    <li>Click "Connect Gmail OAuth" button</li>
-                                    <li>Demonstrate the OAuth flow (authentication window)</li>
-                                    <li>Show successful Gmail connection status</li>
-                                </ul>
-                            </div>
-
-                            <div style="margin-bottom: 1.5rem;">
-                                <h4 style="color: var(--accent-gold); margin-bottom: 0.5rem;">⏱️ 0:30-1:00 - Document Upload & Email Ingestion</h4>
-                                <ul style="margin-left: 1.5rem; line-height: 1.6;">
-                                    <li>Click "Load Lexsy Documents" to load sample legal documents</li>
-                                    <li>Show the Documents tab with all 10 legal documents</li>
-                                    <li>Click "Load Email Thread" to ingest the advisor equity conversation</li>
-                                    <li>Show the Email Thread tab with the 5-message conversation</li>
-                                </ul>
-                            </div>
-
-                            <div style="margin-bottom: 1.5rem;">
-                                <h4 style="color: var(--accent-gold); margin-bottom: 0.5rem;">⏱️ 1:00-1:30 - Multi-Client Support</h4>
-                                <ul style="margin-left: 1.5rem; line-height: 1.6;">
-                                    <li>Click between "Lexsy, Inc." and "TechCorp LLC" clients</li>
-                                    <li>Show how data context switches between clients</li>
-                                    <li>Demonstrate isolated data storage per client</li>
-                                </ul>
-                            </div>
-
-                            <div style="margin-bottom: 1.5rem;">
-                                <h4 style="color: var(--accent-gold); margin-bottom: 0.5rem;">⏱️ 1:30-2:30 - AI Chat & Intelligence</h4>
-                                <ul style="margin-left: 1.5rem; line-height: 1.6;">
-                                    <li>Ask: "What equity grant was proposed for John Smith?"</li>
-                                    <li>Ask: "What are the vesting terms discussed?"</li>
-                                    <li>Ask: "What documentation is needed for the advisor agreement?"</li>
-                                    <li>Show AI responses with source citations from docs and emails</li>
-                                </ul>
-                            </div>
-
-                            <div>
-                                <h4 style="color: var(--accent-gold); margin-bottom: 0.5rem;">⏱️ 2:30-3:00 - Wrap Up</h4>
-                                <ul style="margin-left: 1.5rem; line-height: 1.6;">
-                                    <li>Highlight the vector search capabilities</li>
-                                    <li>Show the deployed URL</li>
-                                    <li>Mention all requirements completed</li>
-                                </ul>
-                            </div>
-                        </div>
-
-                        <div style="background: var(--bg-white); border: 1px solid var(--border-light); padding: 1.5rem; border-radius: 0.75rem;">
-                            <h3 style="margin-bottom: 1rem;">✅ Assignment Requirements Checklist</h3>
-                            <div style="display: grid; gap: 0.75rem;">
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Gmail Integration:</strong> OAuth authentication working</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Mock Email Conversation:</strong> 5-message Lexsy advisor equity thread</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Document Ingestion:</strong> Real file upload + 10 sample Lexsy documents</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Vector Store:</strong> ChromaDB with embeddings and semantic search</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Chat Interface:</strong> AI Q&A with context retrieval</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Multi-Client:</strong> Lexsy Inc. + TechCorp LLC contexts</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                    <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                                    <span><strong>Deployment:</strong> Live on Railway with public URL</span>
-                                </div>
-                            </div>
-                        </div>
+                    <div id="emailsContent" class="empty-state">
+                        <i class="fas fa-envelope"></i>
+                        <h3>No Emails Connected</h3>
+                        <p>Connect Gmail to analyze email threads</p>
                     </div>
                 </div>
             </main>
@@ -1045,20 +758,236 @@
     </div>
 
     <script>
-        // Global variables
-        let currentClientId = 1;
+        // Global state
+        let currentUser = null;
+        let isAuthenticated = false;
         const API_BASE = window.location.origin;
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            setupFileUpload();
-            setupClientSelection();
-            
-            // Show welcome message
-            showAlert('Welcome to Lexsy AI Assistant! Click "Initialize Demo Data" to get started.', 'success');
+            checkAuth();
+            setupEventListeners();
         });
 
-        // Tab switching
+        function checkAuth() {
+            const stored = localStorage.getItem('aiAssistantUser');
+            if (stored) {
+                currentUser = JSON.parse(stored);
+                showMainApp();
+            }
+        }
+
+        function handleAuth(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('userName').value;
+            const email = document.getElementById('userEmail').value;
+            const org = document.getElementById('userOrg').value;
+            
+            currentUser = { name, email, org };
+            localStorage.setItem('aiAssistantUser', JSON.stringify(currentUser));
+            
+            showMainApp();
+        }
+
+        function showMainApp() {
+            document.getElementById('authSection').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+            
+            // Update header
+            const userInfo = document.getElementById('userInfo');
+            const userName = document.getElementById('userName');
+            const userAvatar = document.getElementById('userAvatar');
+            
+            userInfo.style.display = 'flex';
+            userName.textContent = currentUser.name;
+            userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+            
+            isAuthenticated = true;
+            showAlert(`Welcome ${currentUser.name}! Ready to analyze your legal documents.`, 'success');
+        }
+
+        function logout() {
+            localStorage.removeItem('aiAssistantUser');
+            currentUser = null;
+            isAuthenticated = false;
+            
+            document.getElementById('authSection').style.display = 'block';
+            document.getElementById('mainApp').style.display = 'none';
+            document.getElementById('userInfo').style.display = 'none';
+            
+            // Clear form
+            document.querySelector('.auth-form').reset();
+        }
+
+        function setupEventListeners() {
+            // File upload
+            const uploadZone = document.getElementById('uploadZone');
+            const fileInput = document.getElementById('fileInput');
+
+            uploadZone.addEventListener('click', () => {
+                if (!isAuthenticated) {
+                    showAlert('Please sign in first', 'error');
+                    return;
+                }
+                fileInput.click();
+            });
+
+            uploadZone.addEventListener('dragover', handleDragOver);
+            uploadZone.addEventListener('dragleave', handleDragLeave);
+            uploadZone.addEventListener('drop', handleFileDrop);
+            fileInput.addEventListener('change', handleFileSelect);
+
+            // Chat input
+            const chatInput = document.getElementById('chatInput');
+            chatInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // Auto-resize textarea
+            chatInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (!isAuthenticated) return;
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+            
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+            
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+            const maxSize = 10 * 1024 * 1024; // 10MB
+
+            const uploadProgress = document.getElementById('uploadProgress');
+            uploadProgress.style.display = 'block';
+
+            files.forEach(file => {
+                if (!validTypes.includes(file.type)) {
+                    showAlert(`Unsupported file type: ${file.name}. Use PDF, DOCX, or TXT.`, 'error');
+                    return;
+                }
+
+                if (file.size > maxSize) {
+                    showAlert(`File too large: ${file.name}. Max size is 10MB.`, 'error');
+                    return;
+                }
+
+                uploadFile(file);
+            });
+        }
+
+        async function uploadFile(file) {
+            const uploadItem = createUploadItem(file);
+            document.getElementById('uploadProgress').appendChild(uploadItem);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                updateUploadStatus(uploadItem, 'Uploading...', 'processing', 50);
+
+                const response = await fetch(`${API_BASE}/api/documents/upload`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    updateUploadStatus(uploadItem, 'Processing complete!', 'success', 100);
+                    showAlert(`${file.name} uploaded and analyzed successfully!`, 'success');
+                    
+                    // Refresh documents tab
+                    if (document.getElementById('documentsTab').classList.contains('active')) {
+                        loadDocuments();
+                    }
+
+                    // Add welcome message about the uploaded document
+                    setTimeout(() => {
+                        addMessage('assistant', `📄 I've analyzed "${file.name}". You can now ask me questions about its contents!`);
+                    }, 1000);
+
+                } else {
+                    updateUploadStatus(uploadItem, `Error: ${result.error}`, 'error', 0);
+                    showAlert(`Upload failed: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                updateUploadStatus(uploadItem, `Error: ${error.message}`, 'error', 0);
+                showAlert(`Upload error: ${error.message}`, 'error');
+            }
+        }
+
+        function createUploadItem(file) {
+            const uploadItem = document.createElement('div');
+            uploadItem.className = 'upload-item';
+            uploadItem.innerHTML = `
+                <div class="upload-info">
+                    <span class="filename">${file.name}</span>
+                    <span class="file-size">${formatFileSize(file.size)}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="upload-status">Preparing...</div>
+            `;
+            return uploadItem;
+        }
+
+        function updateUploadStatus(uploadItem, status, type, progress) {
+            const progressFill = uploadItem.querySelector('.progress-fill');
+            const statusElement = uploadItem.querySelector('.upload-status');
+            
+            progressFill.style.width = `${progress}%`;
+            statusElement.textContent = status;
+            statusElement.className = `upload-status status-${type}`;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
         function switchTab(tabName) {
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(content => {
@@ -1072,347 +1001,73 @@
             document.getElementById(tabName + 'Tab').classList.add('active');
             event.target.classList.add('active');
 
-            // Load tab content
+            // Load content
             if (tabName === 'documents') {
-                loadDocumentsTab();
+                loadDocuments();
             } else if (tabName === 'emails') {
-                loadEmailsTab();
+                loadEmails();
             }
         }
 
-        // Client selection
-        function setupClientSelection() {
-            document.querySelectorAll('.client-option').forEach(option => {
-                option.addEventListener('click', function() {
-                    document.querySelectorAll('.client-option').forEach(opt => {
-                        opt.classList.remove('active');
-                    });
-                    this.classList.add('active');
-                    currentClientId = parseInt(this.dataset.clientId);
-                    
-                    const clientName = this.querySelector('div div').textContent;
-                    showAlert(`Switched to ${clientName}`, 'success');
-                    
-                    // Refresh current tab content
-                    const activeTab = document.querySelector('.tab.active');
-                    if (activeTab) {
-                        const tabName = activeTab.textContent.trim().toLowerCase().replace(' ', '');
-                        if (tabName.includes('document')) {
-                            loadDocumentsTab();
-                        } else if (tabName.includes('email')) {
-                            loadEmailsTab();
-                        }
-                    }
-                });
-            });
-        }
-
-        // File upload setup
-        function setupFileUpload() {
-            const uploadZone = document.getElementById('uploadZone');
-            const fileInput = document.getElementById('fileInput');
-            const uploadProgress = document.getElementById('uploadProgress');
-
-            // Drag and drop handlers
-            uploadZone.addEventListener('dragover', handleDragOver);
-            uploadZone.addEventListener('dragleave', handleDragLeave);
-            uploadZone.addEventListener('drop', handleDrop);
-            fileInput.addEventListener('change', handleFileSelect);
-
-            function handleDragOver(e) {
-                e.preventDefault();
-                uploadZone.classList.add('dragover');
-            }
-
-            function handleDragLeave(e) {
-                e.preventDefault();
-                uploadZone.classList.remove('dragover');
-            }
-
-            function handleDrop(e) {
-                e.preventDefault();
-                uploadZone.classList.remove('dragover');
-                const files = Array.from(e.dataTransfer.files);
-                handleFiles(files);
-            }
-
-            function handleFileSelect(e) {
-                const files = Array.from(e.target.files);
-                handleFiles(files);
-            }
-
-            function handleFiles(files) {
-                if (files.length === 0) return;
-
-                // Validate files
-                const validFiles = files.filter(file => {
-                    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
-                    const maxSize = 10 * 1024 * 1024; // 10MB
-
-                    if (!validTypes.includes(file.type)) {
-                        showAlert(`${file.name}: Unsupported file type. Use PDF, DOCX, or TXT.`, 'error');
-                        return false;
-                    }
-
-                    if (file.size > maxSize) {
-                        showAlert(`${file.name}: File too large. Max size is 10MB.`, 'error');
-                        return false;
-                    }
-
-                    return true;
-                });
-
-                if (validFiles.length > 0) {
-                    uploadFiles(validFiles);
-                }
-            }
-
-            async function uploadFiles(files) {
-                uploadProgress.style.display = 'block';
-                
-                for (const file of files) {
-                    await uploadSingleFile(file);
-                }
-            }
-
-            async function uploadSingleFile(file) {
-                const uploadItem = createUploadItem(file);
-                uploadProgress.appendChild(uploadItem);
-
-                const formData = new FormData();
-                formData.append('file', file);
-
-                try {
-                    // Update progress to show uploading
-                    updateUploadStatus(uploadItem, 'Uploading...', 'processing', 50);
-
-                    const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/upload`, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    const result = await response.json();
-
-                    if (result.success) {
-                        updateUploadStatus(uploadItem, 'Upload successful!', 'success', 100);
-                        showAlert(`${file.name} uploaded and processed successfully!`, 'success');
-                        
-                        // Refresh documents tab if it's active
-                        if (document.getElementById('documentsTab').classList.contains('active')) {
-                            loadDocumentsTab();
-                        }
-                    } else {
-                        updateUploadStatus(uploadItem, `Error: ${result.error}`, 'error', 0);
-                        showAlert(`Failed to upload ${file.name}: ${result.error}`, 'error');
-                    }
-                } catch (error) {
-                    updateUploadStatus(uploadItem, `Error: ${error.message}`, 'error', 0);
-                    showAlert(`Upload failed for ${file.name}: ${error.message}`, 'error');
-                }
-            }
-
-            function createUploadItem(file) {
-                const uploadItem = document.createElement('div');
-                uploadItem.className = 'upload-item';
-                uploadItem.innerHTML = `
-                    <div class="upload-info">
-                        <span class="filename">${file.name}</span>
-                        <span class="file-size">${formatFileSize(file.size)}</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill"></div>
-                    </div>
-                    <div class="upload-status">Preparing...</div>
-                `;
-                return uploadItem;
-            }
-
-            function updateUploadStatus(uploadItem, status, type, progress) {
-                const progressFill = uploadItem.querySelector('.progress-fill');
-                const statusElement = uploadItem.querySelector('.upload-status');
-                
-                progressFill.style.width = `${progress}%`;
-                statusElement.textContent = status;
-                statusElement.className = `upload-status status-${type}`;
-            }
-
-            function formatFileSize(bytes) {
-                if (bytes === 0) return '0 Bytes';
-                const k = 1024;
-                const sizes = ['Bytes', 'KB', 'MB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-            }
-        }
-
-        // Demo initialization
-        async function initializeDemo() {
-            try {
-                showAlert('Initializing complete demo data...', 'success');
-                
-                const response = await fetch(`${API_BASE}/api/init-demo`, {
-                    method: 'POST'
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showAlert('Demo data initialized! Loading documents and emails...', 'success');
-                    
-                    // Auto-load sample data for Lexsy client
-                    setTimeout(async () => {
-                        await loadSampleDocuments();
-                        await loadSampleEmails();
-                        showAlert('🎉 All demo data loaded! Try asking questions in the AI Chat.', 'success');
-                    }, 1000);
-                } else {
-                    showAlert('Demo initialization failed: ' + (data.error || 'Unknown error'), 'error');
-                }
-            } catch (error) {
-                showAlert('Error initializing demo: ' + error.message, 'error');
-            }
-        }
-
-        // Load sample documents
-        async function loadSampleDocuments() {
-            try {
-                showAlert('Loading Lexsy legal documents...', 'success');
-                
-                const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/upload-sample-documents`, {
-                    method: 'POST'
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showAlert(`📄 Loaded ${data.documents.length} legal documents successfully!`, 'success');
-                    
-                    // Refresh documents tab if active
-                    if (document.getElementById('documentsTab').classList.contains('active')) {
-                        loadDocumentsTab();
-                    }
-                } else {
-                    showAlert('Failed to load documents: ' + (data.error || 'Unknown error'), 'error');
-                }
-            } catch (error) {
-                showAlert('Error loading documents: ' + error.message, 'error');
-            }
-        }
-
-        // Load sample emails
-        async function loadSampleEmails() {
-            try {
-                showAlert('Loading advisor equity email thread...', 'success');
-                
-                const response = await fetch(`${API_BASE}/api/emails/${currentClientId}/ingest-sample-emails`, {
-                    method: 'POST'
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showAlert(`📧 Loaded ${data.emails_processed} emails from advisor equity thread!`, 'success');
-                    
-                    // Refresh emails tab if active
-                    if (document.getElementById('emailsTab').classList.contains('active')) {
-                        loadEmailsTab();
-                    }
-                } else {
-                    showAlert('Failed to load emails: ' + (data.error || 'Unknown error'), 'error');
-                }
-            } catch (error) {
-                showAlert('Error loading emails: ' + error.message, 'error');
-            }
-        }
-
-        // Gmail OAuth connection
-        async function connectGmail() {
-            try {
-                showAlert('Opening Gmail OAuth authentication...', 'success');
-                
-                const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Open OAuth window
-                    const authWindow = window.open(data.auth_url, 'gmail_auth', 'width=500,height=600,scrollbars=yes,resizable=yes');
-                    showAlert('📧 Gmail authentication opened! Complete the OAuth flow in the popup.', 'success');
-                    
-                    // Check if window is closed
-                    const checkClosed = setInterval(() => {
-                        if (authWindow.closed) {
-                            clearInterval(checkClosed);
-                            showAlert('Gmail OAuth flow completed! You can now ingest real emails.', 'success');
-                        }
-                    }, 1000);
-                } else {
-                    showAlert('Failed to get Gmail auth URL: ' + (data.error || 'Unknown error'), 'error');
-                }
-            } catch (error) {
-                showAlert('Error connecting to Gmail: ' + error.message, 'error');
-            }
-        }
-
-        // Chat functionality
         async function sendMessage() {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+
             const input = document.getElementById('chatInput');
             const message = input.value.trim();
             
             if (!message) return;
             
-            // Add user message to chat
-            addMessageToChat('user', message);
+            // Add user message
+            addMessage('user', message);
             input.value = '';
-            
-            // Auto-resize textarea
             input.style.height = 'auto';
+            
+            // Show typing indicator
+            showTypingIndicator();
             
             // Disable send button
             const sendBtn = document.getElementById('sendBtn');
             sendBtn.disabled = true;
-            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Thinking...</span>';
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
             
             try {
-                const response = await fetch(`${API_BASE}/api/chat/${currentClientId}/ask`, {
+                const response = await fetch(`${API_BASE}/api/chat/ask`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
                     },
-                    body: JSON.stringify({
+                    body: JSON.stringify({ 
                         question: message,
-                        include_history: true
+                        user_context: currentUser
                     })
                 });
                 
                 const data = await response.json();
                 
+                // Remove typing indicator
+                hideTypingIndicator();
+                
                 if (data.success) {
-                    addMessageToChat('assistant', data.answer, data.sources);
+                    addMessage('assistant', data.answer, data.sources);
                 } else {
-                    addMessageToChat('assistant', '❌ Sorry, I encountered an error: ' + (data.error || 'Unknown error'));
+                    addMessage('assistant', '❌ Sorry, I encountered an error analyzing your request. Please try again.');
                 }
             } catch (error) {
-                addMessageToChat('assistant', '❌ Sorry, I encountered a connection error: ' + error.message);
+                hideTypingIndicator();
+                addMessage('assistant', '❌ Connection error. Please check your internet connection and try again.');
             } finally {
                 // Re-enable send button
                 sendBtn.disabled = false;
-                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i><span>Send</span>';
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
             }
         }
 
-        function askQuestion(question) {
-            document.getElementById('chatInput').value = question;
-            sendMessage();
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-        }
-
-        function addMessageToChat(sender, content, sources = null) {
+        function addMessage(sender, content, sources = null) {
             const messagesContainer = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
@@ -1430,7 +1085,7 @@
             }
             
             messageDiv.innerHTML = `
-                <div class="message-avatar">${sender === 'user' ? 'You' : 'AI'}</div>
+                <div class="message-avatar">${sender === 'user' ? currentUser.name.charAt(0).toUpperCase() : 'AI'}</div>
                 <div class="message-content">
                     <div class="message-bubble">${content}</div>
                     ${sourcesHtml}
@@ -1441,214 +1096,338 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
 
-        // Load documents tab
-        async function loadDocumentsTab() {
+        function showTypingIndicator() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant';
+            typingDiv.id = 'typingIndicator';
+            
+            typingDiv.innerHTML = `
+                <div class="message-avatar">AI</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        <div class="typing-indicator">
+                            <span>Analyzing</span>
+                            <div class="typing-dots">
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(typingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        async function loadDocuments() {
             const content = document.getElementById('documentsContent');
-            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading documents...</p></div>';
+            
+            if (!isAuthenticated) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-lock"></i>
+                        <h3>Sign In Required</h3>
+                        <p>Please sign in to view your documents</p>
+                    </div>
+                `;
+                return;
+            }
             
             try {
-                const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/documents`);
+                const response = await fetch(`${API_BASE}/api/documents/list`, {
+                    headers: {
+                        'X-User-Email': currentUser.email
+                    }
+                });
                 const data = await response.json();
                 
                 if (data.documents && data.documents.length > 0) {
-                    // Group documents by type
-                    const corporateGov = data.documents.filter(d => 
-                        d.original_filename.includes('Board') || 
-                        d.original_filename.includes('Bylaws') || 
-                        d.original_filename.includes('Certificate') ||
-                        d.original_filename.includes('Initial Action') ||
-                        d.original_filename.includes('Stockholder')
-                    );
-                    
-                    const equityDocs = data.documents.filter(d => 
-                        d.original_filename.includes('Equity') || 
-                        d.original_filename.includes('Stock') ||
-                        d.original_filename.includes('Option') ||
-                        d.original_filename.includes('RSPA')
-                    );
-                    
-                    const agreements = data.documents.filter(d => 
-                        d.original_filename.includes('Agreement') ||
-                        d.original_filename.includes('Advisor')
-                    );
-                    
                     content.innerHTML = `
-                        <div style="margin-bottom: 2rem;">
-                            <h3><i class="fas fa-folder-open"></i> Legal Documents for ${data.client_name}</h3>
-                            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                                Total: ${data.documents.length} documents | 
-                                Corporate: ${corporateGov.length} | 
-                                Equity: ${equityDocs.length} | 
-                                Agreements: ${agreements.length}
-                            </p>
-                        </div>
-                        
-                        ${corporateGov.length > 0 ? `
-                            <div style="margin-bottom: 2rem;">
-                                <h4 style="color: var(--primary-navy); margin-bottom: 1rem;">
-                                    <i class="fas fa-building"></i> Corporate Governance
-                                </h4>
-                                <div class="content-grid">
-                                    ${corporateGov.map(doc => createDocumentCard(doc)).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${equityDocs.length > 0 ? `
-                            <div style="margin-bottom: 2rem;">
-                                <h4 style="color: var(--primary-navy); margin-bottom: 1rem;">
-                                    <i class="fas fa-chart-line"></i> Equity & Stock Plans
-                                </h4>
-                                <div class="content-grid">
-                                    ${equityDocs.map(doc => createDocumentCard(doc)).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${agreements.length > 0 ? `
-                            <div style="margin-bottom: 2rem;">
-                                <h4 style="color: var(--primary-navy); margin-bottom: 1rem;">
-                                    <i class="fas fa-handshake"></i> Agreements & Contracts
-                                </h4>
-                                <div class="content-grid">
-                                    ${agreements.map(doc => createDocumentCard(doc)).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                    `;
-                } else {
-                    content.innerHTML = `
-                        <div style="text-align: center; padding: 4rem 2rem;">
-                            <i class="fas fa-folder-open" style="font-size: 4rem; color: var(--text-secondary); margin-bottom: 1.5rem;"></i>
-                            <h3>No documents found</h3>
-                            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Upload documents or load the sample Lexsy legal documents to get started.</p>
-                            <button class="btn btn-primary" onclick="loadSampleDocuments()" style="max-width: 300px;">
-                                <i class="fas fa-download"></i> Load Sample Documents
-                            </button>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                content.innerHTML = `
-                    <div style="text-align: center; padding: 4rem 2rem;">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: var(--error-red); margin-bottom: 1.5rem;"></i>
-                        <h3>Error loading documents</h3>
-                        <p style="color: var(--text-secondary);">${error.message}</p>
-                    </div>
-                `;
-            }
-        }
-        
-        function createDocumentCard(doc) {
-            const getIcon = (filename) => {
-                if (filename.toLowerCase().includes('.pdf') || doc.file_type === 'pdf') return 'fa-file-pdf';
-                if (filename.toLowerCase().includes('.docx') || doc.file_type === 'docx') return 'fa-file-word';
-                return 'fa-file-alt';
-            };
-            
-            const getStatusColor = (status) => {
-                switch(status) {
-                    case 'completed': return 'var(--success-green)';
-                    case 'processing': return 'var(--accent-gold)';
-                    case 'failed': return 'var(--error-red)';
-                    default: return 'var(--text-secondary)';
-                }
-            };
-            
-            return `
-                <div class="content-card">
-                    <div class="content-icon">
-                        <i class="fas ${getIcon(doc.original_filename)}"></i>
-                    </div>
-                    <h4>${doc.original_filename}</h4>
-                    <div class="content-meta">
-                        <div><strong>Type:</strong> ${doc.file_type.toUpperCase()}</div>
-                        <div><strong>Size:</strong> ${Math.round(doc.file_size / 1024)} KB</div>
-                        <div><strong>Status:</strong> 
-                            <span style="color: ${getStatusColor(doc.processing_status)}; font-weight: 500;">
-                                ${doc.processing_status}
-                            </span>
-                        </div>
-                    </div>
-                    ${doc.processing_status === 'completed' ? `
-                        <div style="position: absolute; top: 1rem; right: 1rem;">
-                            <i class="fas fa-check-circle" style="color: var(--success-green);"></i>
-                        </div>
-                    ` : ''}
-                </div>
-            `;
-        }
-
-        // Load emails tab
-        async function loadEmailsTab() {
-            const content = document.getElementById('emailsContent');
-            content.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading email thread...</p></div>';
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/emails/${currentClientId}/emails`);
-                const data = await response.json();
-                
-                if (data.emails && data.emails.length > 0) {
-                    content.innerHTML = `
-                        <div style="margin-bottom: 2rem;">
-                            <h3><i class="fas fa-envelope-open"></i> Email Thread - ${data.client_name}</h3>
-                            <p style="color: var(--text-secondary);">
-                                Advisor Equity Grant Discussion (${data.emails.length} messages)
-                            </p>
-                        </div>
-                        <div style="max-height: 600px; overflow-y: auto;">
-                            ${data.emails.map(email => `
-                                <div class="email-item">
+                        <div class="content-list">
+                            ${data.documents.map(doc => `
+                                <div class="content-item">
+                                    <div class="content-header">
                                         <div>
-                                            <div class="email-subject">${email.subject}</div>
-                                            <div class="email-participants">
-                                                <strong>From:</strong> ${email.sender} → <strong>To:</strong> ${email.recipient}
+                                            <div class="content-title">
+                                                <i class="fas fa-file-${doc.file_type === 'pdf' ? 'pdf' : 'alt'}"></i>
+                                                ${doc.original_filename}
+                                            </div>
+                                            <div class="content-meta">
+                                                ${doc.file_type.toUpperCase()} • ${Math.round((doc.file_size || 0) / 1024)} KB
+                                                <span class="status-indicator status-${doc.processing_status === 'completed' ? 'success' : 'processing'}">
+                                                    ${doc.processing_status === 'completed' ? 'Ready' : 'Processing'}
+                                                </span>
                                             </div>
                                         </div>
-                                        <div class="email-date">
-                                            ${new Date(email.date_sent || email.created_at).toLocaleDateString('en-US', {
-                                                year: 'numeric',
-                                                month: 'short',
-                                                day: 'numeric',
-                                                hour: '2-digit',
-                                                minute: '2-digit'
-                                            })}
-                                        </div>
+                                        <button onclick="deleteDocument(${doc.id})" style="background: none; border: none; color: #dc2626; cursor: pointer; padding: 0.25rem;">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </div>
-                                    <div class="email-body">${email.body}</div>
+                                    ${doc.processing_status === 'completed' ? 
+                                        `<div style="margin-top: 0.5rem; font-size: 0.875rem; color: #6b7280;">
+                                            Click to ask questions about this document
+                                        </div>` : ''
+                                    }
                                 </div>
                             `).join('')}
                         </div>
                     `;
                 } else {
                     content.innerHTML = `
-                        <div style="text-align: center; padding: 4rem 2rem;">
-                            <i class="fas fa-envelope-open" style="font-size: 4rem; color: var(--text-secondary); margin-bottom: 1.5rem;"></i>
-                            <h3>No emails found</h3>
-                            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Load the sample email thread or connect Gmail to ingest real emails.</p>
-                            <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
-                                <button class="btn btn-primary" onclick="loadSampleEmails()" style="max-width: 250px;">
-                                    <i class="fas fa-download"></i> Load Sample Emails
-                                </button>
-                                <button class="btn btn-gmail" onclick="connectGmail()" style="max-width: 250px;">
-                                    <i class="fab fa-google"></i> Connect Gmail
-                                </button>
-                            </div>
+                        <div class="empty-state">
+                            <i class="fas fa-file-alt"></i>
+                            <h3>No Documents Yet</h3>
+                            <p>Upload PDF, DOCX, or TXT files to start analysis</p>
                         </div>
                     `;
                 }
             } catch (error) {
                 content.innerHTML = `
-                    <div style="text-align: center; padding: 4rem 2rem;">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 4rem; color: var(--error-red); margin-bottom: 1.5rem;"></i>
-                        <h3>Error loading emails</h3>
-                        <p style="color: var(--text-secondary);">${error.message}</p>
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Documents</h3>
+                        <p>Please try again</p>
                     </div>
                 `;
             }
         }
 
-        // Alert system
+        async function loadEmails() {
+            const content = document.getElementById('emailsContent');
+            
+            if (!isAuthenticated) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-lock"></i>
+                        <h3>Sign In Required</h3>
+                        <p>Please sign in to view your emails</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/emails/list`, {
+                    headers: {
+                        'X-User-Email': currentUser.email
+                    }
+                });
+                const data = await response.json();
+                
+                if (data.emails && data.emails.length > 0) {
+                    content.innerHTML = `
+                        <div class="content-list">
+                            ${data.emails.map(email => `
+                                <div class="content-item">
+                                    <div class="content-header">
+                                        <div>
+                                            <div class="content-title">
+                                                <i class="fas fa-envelope"></i>
+                                                ${email.subject}
+                                            </div>
+                                            <div class="content-meta">
+                                                From: ${email.sender} • To: ${email.recipient}
+                                                ${email.date_sent ? ` • ${new Date(email.date_sent).toLocaleDateString()}` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 0.5rem; font-size: 0.875rem; color: #475569;">
+                                        ${email.snippet || (email.body ? email.body.substring(0, 100) + '...' : '')}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-envelope"></i>
+                            <h3>No Emails Connected</h3>
+                            <p>Connect Gmail to analyze email threads</p>
+                            <button class="btn btn-gmail" onclick="connectGmail()" style="max-width: 200px;">
+                                <i class="fab fa-google"></i>
+                                Connect Gmail
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Emails</h3>
+                        <p>Please try again</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function connectGmail() {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`, {
+                    headers: {
+                        'X-User-Email': currentUser.email
+                    }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const authWindow = window.open(data.auth_url, 'gmail_auth', 'width=500,height=600,scrollbars=yes,resizable=yes');
+                    showAlert('Gmail authentication opened in popup window', 'info');
+                    
+                    // Check if window is closed
+                    const checkClosed = setInterval(() => {
+                        if (authWindow.closed) {
+                            clearInterval(checkClosed);
+                            document.getElementById('gmailStatus').style.display = 'block';
+                            document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
+                            showAlert('Gmail connected successfully! You can now analyze email threads.', 'success');
+                            
+                            // Refresh emails tab if active
+                            if (document.getElementById('emailsTab').classList.contains('active')) {
+                                loadEmails();
+                            }
+                        }
+                    }, 1000);
+                } else {
+                    showAlert('Failed to connect Gmail. Please try again.', 'error');
+                }
+            } catch (error) {
+                showAlert('Gmail connection error. Please try again.', 'error');
+            }
+        }
+
+        async function loadSampleData() {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+
+            try {
+                showAlert('Loading sample legal documents and email thread...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/demo/load-sample`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ Sample data loaded! Try asking: "What equity grant was proposed for John Smith?"', 'success');
+                    
+                    // Refresh current tab
+                    const activeTab = document.querySelector('.tab.active');
+                    if (activeTab.textContent.includes('Documents')) {
+                        loadDocuments();
+                    } else if (activeTab.textContent.includes('Emails')) {
+                        loadEmails();
+                    }
+
+                    // Add helpful message
+                    setTimeout(() => {
+                        addMessage('assistant', '📊 I\'ve loaded sample legal documents and an email thread about advisor equity grants. You can now ask me questions like:\n\n• "What equity grant was proposed for John Smith?"\n• "What are the vesting terms discussed?"\n• "What board approvals are needed?"');
+                    }, 1000);
+                } else {
+                    showAlert('Failed to load sample data. Please try again.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error loading sample data. Please try again.', 'error');
+            }
+        }
+
+        async function clearAllData() {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first', 'error');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to clear all your documents and data?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/user/clear-data`, {
+                    method: 'POST',
+                    headers: {
+                        'X-User-Email': currentUser.email
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('All data cleared successfully', 'success');
+                    
+                    // Refresh tabs
+                    loadDocuments();
+                    loadEmails();
+                    
+                    // Clear chat
+                    const chatMessages = document.getElementById('chatMessages');
+                    chatMessages.innerHTML = `
+                        <div class="message assistant">
+                            <div class="message-avatar">AI</div>
+                            <div class="message-content">
+                                <div class="message-bubble">
+                                    👋 Hello! I'm your AI legal assistant. Upload documents or connect Gmail to get started, then ask me questions about your legal matters.
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    showAlert('Failed to clear data. Please try again.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error clearing data. Please try again.', 'error');
+            }
+        }
+
+        async function deleteDocument(docId) {
+            if (!confirm('Are you sure you want to delete this document?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/documents/${docId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-User-Email': currentUser.email
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Document deleted successfully', 'success');
+                    loadDocuments();
+                } else {
+                    showAlert('Failed to delete document', 'error');
+                }
+            } catch (error) {
+                showAlert('Error deleting document', 'error');
+            }
+        }
+
         function showAlert(message, type) {
             const alertDiv = document.createElement('div');
             alertDiv.className = `alert alert-${type}`;
@@ -1661,57 +1440,15 @@
                 <span>${message}</span>
             `;
             
-            // Insert at the top of container
-            const container = document.querySelector('.container');
-            const firstChild = container.querySelector('.assignment-info') || container.firstChild;
-            container.insertBefore(alertDiv, firstChild);
+            const container = document.querySelector('.container') || document.body;
+            container.insertBefore(alertDiv, container.firstChild);
             
-            // Remove after 6 seconds
             setTimeout(() => {
                 if (alertDiv.parentNode) {
                     alertDiv.remove();
                 }
             }, 6000);
         }
-
-        // Auto-resize textarea
-        document.addEventListener('DOMContentLoaded', function() {
-            const textarea = document.getElementById('chatInput');
-            if (textarea) {
-                textarea.addEventListener('input', function() {
-                    this.style.height = 'auto';
-                    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-                });
-            }
-        });
-
-        // Update connection status
-        function updateConnectionStatus() {
-            fetch(`${API_BASE}/api/status`)
-                .then(response => response.json())
-                .then(data => {
-                    const statusElement = document.getElementById('connectionStatus');
-                    if (data.features && data.features.openai_integration && data.features.gmail_integration) {
-                        statusElement.textContent = 'All Systems Ready';
-                        statusElement.style.color = '#10b981';
-                    } else if (data.features && data.features.openai_integration) {
-                        statusElement.textContent = 'AI Ready, Gmail Pending';
-                        statusElement.style.color = '#f59e0b';
-                    } else {
-                        statusElement.textContent = 'System Initializing';
-                        statusElement.style.color = '#6b7280';
-                    }
-                })
-                .catch(() => {
-                    document.getElementById('connectionStatus').textContent = 'Connection Issue';
-                });
-        }
-
-        // Check status periodically
-        setInterval(updateConnectionStatus, 30000);
-        
-        // Initial status check
-        setTimeout(updateConnectionStatus, 2000);
     </script>
 </body>
 </html>
