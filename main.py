@@ -17,7 +17,7 @@ from api.clients import router as clients_router
 from api.chat import router as chat_router  # ← Add this line
 from api.documents import router as documents_router
 from api.emails import router as emails_router
-from api.demo import router as demo_router
+#from api.demo import router as demo_router
 
 app = FastAPI()
 
@@ -36,7 +36,7 @@ app.include_router(clients_router, prefix="/api/clients")
 app.include_router(documents_router, prefix="/api/documents")
 app.include_router(emails_router, prefix="/api/emails")
 app.include_router(chat_router, prefix="/api/chat")      
-app.include_router(demo_router, prefix="/api/demo")
+#app.include_router(demo_router, prefix="/api/demo")
 
 # Import your existing services (with fallback for deployment)
 try:
