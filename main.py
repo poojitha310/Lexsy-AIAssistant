@@ -175,7 +175,7 @@ async def api_status():
             "environment": "production" if not os.getenv("DEBUG") else "development"
         },
         "active_users": len(user_sessions),
-        "timestamp": datetime.now().iosformat()
+        "timestamp": datetime.now().isoformat()
     }
 
 # ======================
