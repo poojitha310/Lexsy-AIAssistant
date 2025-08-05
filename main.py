@@ -1504,3 +1504,271 @@ if __name__ == "__main__":
         port=port,
         reload=False
     )
+    # Add these debug endpoints to your main.py
+
+@app.get("/api/debug/system-status")
+async def debug_system_status():
+    """Debug endpoint to check system status"""
+    try:
+        status = {
+            "timestamp": datetime.now().isoformat(),
+            "environment": {
+                "openai_api_key": "✅ Set" if os.getenv("OPENAI_API_KEY") else "❌ Missing",
+                "openai_key_length": len(os.getenv("OPENAI_API_KEY", "")) if os.getenv("OPENAI_API_KEY") else 0,
+                "google_client_id": "✅ Set" if os.getenv("GOOGLE_CLIENT_ID") else "❌ Missing",
+                "upload_dir": settings.UPLOAD_DIR,
+                "chromadb_path": settings.CHROMADB_PATH,
+                "upload_dir_exists": os.path.exists(settings.UPLOAD_DIR),
+                "chromadb_path_exists": os.path.exists(settings.CHROMADB_PATH)
+            },
+            "services": {
+                "full_features": FULL_FEATURES,
+                "database": "available" if FULL_FEATURES else "limited"
+            }
+        }
+        
+        # Test OpenAI connection
+        if os.getenv("OPENAI_API_KEY"):
+            try:
+                import openai
+                openai.api_key = os.getenv("OPENAI_API_KEY")
+                
+                # Test embeddings
+                response = openai.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=["test"]
+                )
+                status["services"]["openai_embeddings"] = "✅ Working"
+                status["services"]["openai_embedding_dimensions"] = len(response.data[0].embedding)
+            except Exception as e:
+                status["services"]["openai_embeddings"] = f"❌ Error: {str(e)}"
+        else:
+            status["services"]["openai_embeddings"] = "❌ No API key"
+        
+        # Test ChromaDB
+        if FULL_FEATURES:
+            try:
+                from services.vector_service import VectorService
+                vector_service = VectorService()
+                health = vector_service.health_check()
+                status["services"]["chromadb"] = health
+            except Exception as e:
+                status["services"]["chromadb"] = f"❌ Error: {str(e)}"
+        else:
+            status["services"]["chromadb"] = "❌ Full features not available"
+        
+        return status
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/api/debug/documents/{client_id}")
+async def debug_client_documents(client_id: int):
+    """Debug endpoint to check client documents and processing status"""
+    try:
+        if not FULL_FEATURES:
+            return {"error": "Full features not available for debugging"}
+        
+        db = SessionLocal()
+        
+        # Get client
+        client = db.query(Client).filter(Client.id == client_id).first()
+        if not client:
+            db.close()
+            return {"error": "Client not found"}
+        
+        # Get all documents for this client
+        documents = db.query(Document).filter(Document.client_id == client_id).all()
+        
+        debug_info = {
+            "client": {
+                "id": client.id,
+                "name": client.name,
+                "created_at": client.created_at.isoformat() if client.created_at else None
+            },
+            "documents": []
+        }
+        
+        for doc in documents:
+            doc_info = {
+                "id": doc.id,
+                "filename": doc.original_filename,
+                "file_type": doc.file_type,
+                "file_size": doc.file_size,
+                "processing_status": doc.processing_status,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                "file_path_exists": os.path.exists(doc.file_path) if doc.file_path else False,
+                "has_extracted_text": bool(doc.extracted_text),
+                "text_length": len(doc.extracted_text) if doc.extracted_text else 0,
+                "has_chunk_ids": bool(doc.chunk_ids),
+                "chunk_count": len(json.loads(doc.chunk_ids)) if doc.chunk_ids else 0
+            }
+            
+            # Try to get vector store stats
+            try:
+                from services.vector_service import VectorService
+                vector_service = VectorService()
+                collection = vector_service.get_or_create_collection(client_id)
+                
+                # Try to find chunks for this document
+                results = collection.get(
+                    where={
+                        "client_id": client_id,
+                        "document_id": doc.id,
+                        "source_type": "document"
+                    }
+                )
+                doc_info["vector_chunks_found"] = len(results["ids"]) if results and results["ids"] else 0
+                
+            except Exception as e:
+                doc_info["vector_error"] = str(e)
+            
+            debug_info["documents"].append(doc_info)
+        
+        db.close()
+        return debug_info
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/debug/reprocess-document/{client_id}/{document_id}")
+async def debug_reprocess_document(client_id: int, document_id: int):
+    """Debug endpoint to manually reprocess a stuck document"""
+    try:
+        if not FULL_FEATURES:
+            return {"error": "Full features not available"}
+        
+        db = SessionLocal()
+        
+        # Get document
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.client_id == client_id
+        ).first()
+        
+        if not document:
+            db.close()
+            return {"error": "Document not found"}
+        
+        # Initialize services
+        from services.document_service import DocumentService
+        from services.vector_service import VectorService
+        
+        doc_service = DocumentService()
+        vector_service = VectorService()
+        
+        processing_log = []
+        
+        # Step 1: Check file exists
+        if document.file_path and os.path.exists(document.file_path):
+            processing_log.append("✅ File exists on disk")
+        else:
+            processing_log.append("❌ File missing on disk")
+            db.close()
+            return {"error": "File missing", "log": processing_log}
+        
+        # Step 2: Update status to processing
+        document.processing_status = "processing"
+        db.commit()
+        processing_log.append("🔄 Status updated to processing")
+        
+        try:
+            # Step 3: Extract text
+            extraction_result = doc_service.extract_text_from_file(
+                file_path=document.file_path,
+                file_type=document.file_type
+            )
+            
+            if extraction_result["success"]:
+                processing_log.append(f"✅ Text extracted: {extraction_result['word_count']} words")
+                document.extracted_text = extraction_result["text"]
+                document.metadata = json.dumps(extraction_result["metadata"])
+            else:
+                processing_log.append(f"❌ Text extraction failed: {extraction_result['error']}")
+                document.processing_status = "failed"
+                db.commit()
+                db.close()
+                return {"error": "Text extraction failed", "log": processing_log}
+            
+            # Step 4: Clear old vector data
+            try:
+                vector_service.delete_document_chunks(client_id, document_id)
+                processing_log.append("🗑️ Cleared old vector chunks")
+            except Exception as e:
+                processing_log.append(f"⚠️ Error clearing old chunks: {str(e)}")
+            
+            # Step 5: Add to vector store
+            chunk_ids = vector_service.add_document_to_vector_store(
+                client_id=client_id,
+                document_id=document.id,
+                text=extraction_result["text"],
+                metadata={
+                    "filename": document.original_filename,
+                    "file_type": document.file_type,
+                    "reprocessed_at": datetime.now().isoformat()
+                }
+            )
+            
+            if chunk_ids:
+                document.chunk_ids = json.dumps(chunk_ids)
+                document.processing_status = "completed"
+                processing_log.append(f"✅ Vector chunks created: {len(chunk_ids)}")
+            else:
+                document.processing_status = "failed"
+                processing_log.append("❌ Failed to create vector chunks")
+            
+            db.commit()
+            
+            result = {
+                "success": document.processing_status == "completed",
+                "document": document.to_dict(),
+                "processing_log": processing_log,
+                "chunks_created": len(chunk_ids) if chunk_ids else 0
+            }
+            
+            db.close()
+            return result
+            
+        except Exception as e:
+            document.processing_status = "failed"
+            db.commit()
+            db.close()
+            processing_log.append(f"❌ Processing failed: {str(e)}")
+            return {"error": str(e), "log": processing_log}
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+# Also add this test endpoint for OpenAI
+@app.get("/api/debug/test-openai")
+async def test_openai_api():
+    """Test OpenAI API connection"""
+    try:
+        if not os.getenv("OPENAI_API_KEY"):
+            return {"error": "No OpenAI API key found"}
+        
+        import openai
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        
+        # Test embeddings
+        response = openai.embeddings.create(
+            model="text-embedding-3-small",
+            input=["This is a test"]
+        )
+        
+        return {
+            "success": True,
+            "model": "text-embedding-3-small",
+            "embedding_dimensions": len(response.data[0].embedding),
+            "usage": response.usage.total_tokens if hasattr(response, 'usage') else "N/A"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
