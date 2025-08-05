@@ -1,4 +1,1096 @@
-<!DOCTYPE html>
+// Auto-resize textarea
+            chatInput.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+
+            // Close modal when clicking outside
+            window.addEventListener('click', function(event) {
+                const modal = document.getElementById('addClientModal');
+                if (event.target === modal) {
+                    hideAddClientModal();
+                }
+            });
+        }
+
+        // ===== CLIENT MANAGEMENT =====
+
+        async function loadClients() {
+            try {
+                const response = await fetch(`${API_BASE}/api/clients`);
+                const data = await response.json();
+                
+                if (data.success && data.clients) {
+                    availableClients = data.clients;
+                    
+                    const selector = document.getElementById('clientSelector');
+                    selector.innerHTML = '<option value="">Select Client...</option>';
+                    
+                    availableClients.forEach(client => {
+                        const option = document.createElement('option');
+                        option.value = client.id;
+                        option.textContent = `${client.name} (${client.company})`;
+                        selector.appendChild(option);
+                    });
+                    
+                    // Auto-select Lexsy if available
+                    const lexsyClient = availableClients.find(c => c.name.includes('Lexsy'));
+                    if (lexsyClient) {
+                        selector.value = lexsyClient.id;
+                        switchClient();
+                    }
+                } else {
+                    console.error('Failed to load clients:', data.error);
+                }
+                
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                showAlert('Failed to load clients', 'error');
+            }
+        }
+
+        async function switchClient() {
+            const selector = document.getElementById('clientSelector');
+            const clientId = selector.value;
+            
+            if (!clientId) {
+                currentClientId = null;
+                document.getElementById('currentClient').style.display = 'none';
+                updateUploadZone();
+                updateChatPlaceholder();
+                resetTabContents();
+                return;
+            }
+            
+            try {
+                currentClientId = parseInt(clientId);
+                
+                // Get client details
+                const response = await fetch(`${API_BASE}/api/clients/${clientId}`);
+                const data = await response.json();
+                
+                if (data.success && data.client) {
+                    const client = data.client;
+                    
+                    // Update client display
+                    document.getElementById('currentClientName').textContent = client.name;
+                    document.getElementById('currentClient').style.display = 'block';
+                    
+                    // Update stats
+                    const stats = client.stats || {};
+                    document.getElementById('currentClientStats').textContent = 
+                        `${stats.documents || 0} docs • ${stats.emails || 0} emails • ${stats.conversations || 0} chats`;
+                    
+                    // Update indicators
+                    document.getElementById('docsIndicator').style.display = stats.documents > 0 ? 'inline' : 'none';
+                    document.getElementById('emailsIndicator').style.display = stats.emails > 0 ? 'inline' : 'none';
+                    
+                    showAlert(`Switched to ${client.name}`, 'success');
+                    
+                    // Update UI state
+                    updateUploadZone();
+                    updateChatPlaceholder();
+                    
+                    // Load suggested questions
+                    loadSuggestedQuestions();
+                    
+                    // Refresh current tab content
+                    const activeTab = document.querySelector('.tab.active');
+                    if (activeTab.textContent.includes('Documents')) {
+                        loadDocuments();
+                    } else if (activeTab.textContent.includes('Email')) {
+                        loadEmails();
+                    }
+                    
+                    // Add welcome message
+                    addMessage('assistant', `🔄 Switched to client: **${client.name}**. You can now ask questions about their documents and emails, or load sample data to get started.`);
+                    
+                } else {
+                    showAlert('Failed to get client details', 'error');
+                }
+            } catch (error) {
+                showAlert('Failed to switch client', 'error');
+                console.error('Switch client error:', error);
+            }
+        }
+
+        function updateUploadZone() {
+            const uploadZone = document.getElementById('uploadZone');
+            const uploadNote = document.getElementById('uploadNote');
+            
+            if (currentClientId) {
+                uploadZone.classList.remove('disabled');
+                uploadNote.textContent = 'Ready to upload files';
+                uploadNote.style.color = '#059669';
+            } else {
+                uploadZone.classList.add('disabled');
+                uploadNote.textContent = 'Select a client first';
+                uploadNote.style.color = '#ef4444';
+            }
+        }
+
+        function updateChatPlaceholder() {
+            const chatInput = document.getElementById('chatInput');
+            const sendBtn = document.getElementById('sendBtn');
+            
+            if (currentClientId) {
+                const client = availableClients.find(c => c.id === currentClientId);
+                chatInput.placeholder = `Ask questions about ${client?.name || 'this client'}'s legal matters...`;
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+            } else {
+                chatInput.placeholder = 'Select a client first, then ask about their legal matters...';
+                chatInput.disabled = true;
+                sendBtn.disabled = true;
+            }
+        }
+
+        async function loadSuggestedQuestions() {
+            if (!currentClientId) return;
+            
+            const suggestionsContainer = document.getElementById('suggestedQuestions');
+            
+            // Client-specific suggestions
+            let suggestions = [];
+            
+            const client = availableClients.find(c => c.id === currentClientId);
+            if (client && client.name.includes('Lexsy')) {
+                suggestions = [
+                    "What equity grant was proposed for John Smith?",
+                    "What are the vesting terms discussed in emails?",
+                    "How many shares are available in our equity incentive plan?",
+                    "What documentation is needed for the advisor agreement?",
+                    "What board approvals are required?"
+                ];
+            } else {
+                suggestions = [
+                    "Summarize the key legal documents",
+                    "What compliance requirements do we have?",
+                    "What decisions were made in recent emails?",
+                    "What action items are pending?"
+                ];
+            }
+            
+            // Create suggestion buttons
+            suggestionsContainer.innerHTML = '';
+            suggestions.forEach(question => {
+                const btn = document.createElement('button');
+                btn.className = 'suggestion-btn';
+                btn.textContent = question;
+                btn.onclick = () => {
+                    document.getElementById('chatInput').value = question;
+                    sendMessage();
+                };
+                suggestionsContainer.appendChild(btn);
+            });
+            
+            suggestionsContainer.style.display = suggestions.length > 0 ? 'flex' : 'none';
+        }
+
+        function showAddClientModal() {
+            document.getElementById('addClientModal').style.display = 'block';
+        }
+
+        function hideAddClientModal() {
+            document.getElementById('addClientModal').style.display = 'none';
+            document.getElementById('addClientForm').reset();
+        }
+
+        async function addNewClient(event) {
+            event.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('name', document.getElementById('newClientName').value);
+            formData.append('email', document.getElementById('newClientEmail').value);
+            formData.append('company', document.getElementById('newClientCompany').value);
+            formData.append('description', document.getElementById('newClientDescription').value);
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/clients`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`Client ${data.client.name} added successfully!`, 'success');
+                    hideAddClientModal();
+                    await loadClients();
+                    
+                    // Auto-select the new client
+                    const selector = document.getElementById('clientSelector');
+                    selector.value = data.client.id;
+                    await switchClient();
+                } else {
+                    showAlert(`Failed to add client: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert('Error adding client', 'error');
+                console.error('Add client error:', error);
+            }
+        }
+
+        async function deleteCurrentClient() {
+            if (!currentClientId) return;
+            
+            const client = availableClients.find(c => c.id === currentClientId);
+            if (!client) return;
+            
+            if (confirm(`Are you sure you want to delete ${client.name}? This will remove all their documents, emails, and conversations.`)) {
+                try {
+                    const response = await fetch(`${API_BASE}/api/clients/${currentClientId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        showAlert(`${client.name} deleted successfully`, 'success');
+                        
+                        // Reset state
+                        currentClientId = null;
+                        document.getElementById('currentClient').style.display = 'none';
+                        
+                        // Reload clients
+                        await loadClients();
+                        
+                        // Reset UI
+                        updateUploadZone();
+                        updateChatPlaceholder();
+                        resetTabContents();
+                        
+                    } else {
+                        showAlert(`Failed to delete client: ${data.error}`, 'error');
+                    }
+                } catch (error) {
+                    showAlert('Error deleting client', 'error');
+                    console.error('Delete client error:', error);
+                }
+            }
+        }
+
+        async function loadClientSampleData() {
+            if (!currentClientId) return;
+            
+            try {
+                showAlert('Loading sample data for client...', 'info');
+                
+                // Load sample documents
+                const docResponse = await fetch(`${API_BASE}/api/documents/${currentClientId}/upload-sample-documents`, {
+                    method: 'POST'
+                });
+                const docData = await docResponse.json();
+                
+                // Load sample emails
+                const emailResponse = await fetch(`${API_BASE}/api/emails/${currentClientId}/ingest-sample-emails`, {
+                    method: 'POST'
+                });
+                const emailData = await emailResponse.json();
+                
+                if (docData.success && emailData.success) {
+                    showAlert(`Sample data loaded: ${docData.documents?.length || 0} documents, ${emailData.emails_processed || 0} emails`, 'success');
+                    
+                    // Refresh client stats
+                    await switchClient();
+                    
+                    // Refresh current tab
+                    const activeTab = document.querySelector('.tab.active');
+                    if (activeTab.textContent.includes('Documents')) {
+                        loadDocuments();
+                    } else if (activeTab.textContent.includes('Email')) {
+                        loadEmails();
+                    }
+                    
+                    // Add context message
+                    addMessage('assistant', `📊 Sample data loaded for ${availableClients.find(c => c.id === currentClientId)?.name}! You can now ask questions about the Lexsy advisor equity grant discussion and legal documents.`);
+                    
+                } else {
+                    showAlert('Failed to load some sample data', 'error');
+                }
+                
+            } catch (error) {
+                showAlert('Error loading sample data', 'error');
+                console.error('Load sample data error:', error);
+            }
+        }
+
+        // ===== FILE UPLOAD =====
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            if (currentClientId) {
+                e.currentTarget.classList.add('dragover');
+            }
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            
+            if (!isAuthenticated) {
+                showAlert('Please sign in first to upload files', 'error');
+                return;
+            }
+            
+            if (!currentClientId) {
+                showAlert('Please select a client first to upload files', 'error');
+                return;
+            }
+            
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            if (!isAuthenticated || !currentClientId) {
+                return;
+            }
+            
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+            const maxSize = 10 * 1024 * 1024; // 10MB
+
+            files.forEach(file => {
+                if (!validTypes.includes(file.type)) {
+                    showAlert(`Unsupported file type: ${file.name}. Use PDF, DOCX, or TXT.`, 'error');
+                    return;
+                }
+
+                if (file.size > maxSize) {
+                    showAlert(`File too large: ${file.name}. Max size is 10MB.`, 'error');
+                    return;
+                }
+
+                uploadFile(file);
+            });
+        }
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showAlert(`Uploading ${file.name}...`, 'info');
+
+                const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/upload`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(`${file.name} uploaded and analyzed successfully!`, 'success');
+                    
+                    // Refresh documents tab if active
+                    if (document.getElementById('documentsTab').classList.contains('active')) {
+                        loadDocuments();
+                    }
+                    
+                    // Refresh client stats
+                    await switchClient();
+
+                    // Add success message
+                    const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
+                    addMessage('assistant', `📄 I've analyzed "${file.name}" for ${clientName}. You can now ask questions about its contents!`);
+
+                } else {
+                    showAlert(`Upload failed: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Upload error: ${error.message}`, 'error');
+                console.error('Upload error:', error);
+            }
+        }
+
+        // ===== CHAT =====
+
+        async function sendMessage() {
+            if (!isAuthenticated || !currentClientId) {
+                return;
+            }
+
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message
+            addMessage('user', message);
+            input.value = '';
+            input.style.height = 'auto';
+            
+            // Hide suggestions after first message
+            document.getElementById('suggestedQuestions').style.display = 'none';
+            
+            // Show typing indicator
+            showTypingIndicator();
+            
+            // Disable send button
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            
+            try {
+                const formData = new FormData();
+                formData.append('question', message);
+                formData.append('include_history', 'true');
+                
+                const response = await fetch(`${API_BASE}/api/chat/${currentClientId}/ask`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-User-Email': currentUser.email,
+                        'X-User-Name': currentUser.name
+                    }
+                });
+                
+                const data = await response.json();
+                
+                // Remove typing indicator
+                hideTypingIndicator();
+                
+                if (data.success) {
+                    addMessage('assistant', data.answer, data.sources);
+                } else {
+                    addMessage('assistant', '❌ Sorry, I encountered an error analyzing your request. Please try again.');
+                }
+            } catch (error) {
+                hideTypingIndicator();
+                addMessage('assistant', '❌ Connection error. Please check your internet connection and try again.');
+                console.error('Chat error:', error);
+            } finally {
+                // Re-enable send button
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            }
+        }
+
+        function addMessage(sender, content, sources = null) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            let sourcesHtml = '';
+            if (sources && sources.length > 0) {
+                sourcesHtml = '<div class="message-sources">';
+                sourcesHtml += '<strong>Sources:</strong><br>';
+                sources.forEach(source => {
+                    const icon = source.type === 'document' ? 'fa-file-pdf' : 'fa-envelope';
+                    const name = source.filename || source.subject || 'Source';
+                    sourcesHtml += `<span class="source-tag"><i class="fas ${icon}"></i> ${name}</span>`;
+                });
+                sourcesHtml += '</div>';
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="message-avatar">${sender === 'user' ? currentUser.name.charAt(0).toUpperCase() : 'AI'}</div>
+                <div class="message-content">
+                    <div class="message-bubble">${content}</div>
+                    ${sourcesHtml}
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const messagesContainer = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant';
+            typingDiv.id = 'typingIndicator';
+            
+            typingDiv.innerHTML = `
+                <div class="message-avatar">AI</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        <div class="typing-indicator">
+                            <span>Analyzing</span>
+                            <div class="typing-dots">
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(typingDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        function resetChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-avatar">AI</div>
+                    <div class="message-content">
+                        <div class="message-bubble">
+                            👋 Hello! I'm your AI legal assistant. Select a client to get started, then I'll help you analyze their legal documents and email threads.
+                            <br><br>
+                            Try the <strong>Initialize Demo</strong> button to load sample legal data, or create your own client and upload documents.
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('suggestedQuestions').style.display = 'none';
+        }
+
+        // ===== TAB MANAGEMENT =====
+
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Show selected tab
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            event.target.classList.add('active');
+
+            // Load content
+            if (tabName === 'documents') {
+                loadDocuments();
+            } else if (tabName === 'emails') {
+                loadEmails();
+            }
+        }
+
+        function resetTabContents() {
+            document.getElementById('documentsContent').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-file-alt"></i>
+                    <h3>No Documents Yet</h3>
+                    <p>Select a client and upload PDF, DOCX, or TXT files to start analysis</p>
+                </div>
+            `;
+            
+            document.getElementById('emailsContent').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-envelope"></i>
+                    <h3>No Email Threads</h3>
+                    <p>Select a client and connect Gmail to analyze email threads</p>
+                </div>
+            `;
+        }
+
+        // ===== DOCUMENTS TAB =====
+
+        async function loadDocuments() {
+            const content = document.getElementById('documentsContent');
+            
+            if (!isAuthenticated) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-lock"></i>
+                        <h3>Sign In Required</h3>
+                        <p>Please sign in to view documents</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            if (!currentClientId) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <h3>Select a Client</h3>
+                        <p>Please select a client to view their documents</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/documents`);
+                const data = await response.json();
+                
+                if (data.documents && data.documents.length > 0) {
+                    content.innerHTML = `
+                        <div style="margin-bottom: 1rem;">
+                            <h4>Documents for ${data.client_name}</h4>
+                            <p style="color: #64748b; font-size: 0.9rem;">Total: ${data.total_documents} documents</p>
+                        </div>
+                        <div class="content-list">
+                            ${data.documents.map(doc => `
+                                <div class="content-item">
+                                    <div class="content-title">
+                                        <i class="fas fa-file-${doc.file_type === 'pdf' ? 'pdf' : doc.file_type === 'docx' ? 'word' : 'alt'}"></i>
+                                        ${doc.original_filename || doc.filename}
+                                        <span style="margin-left: auto; font-size: 0.8rem; color: ${doc.processing_status === 'completed' ? '#059669' : '#d97706'};">
+                                            ${doc.processing_status === 'completed' ? '✅ Ready' : '⏳ Processing'}
+                                        </span>
+                                    </div>
+                                    <div class="content-meta">
+                                        ${doc.file_type ? doc.file_type.toUpperCase() : 'DOC'} • ${Math.round((doc.file_size || 0) / 1024)} KB • Uploaded ${new Date(doc.created_at).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-file-alt"></i>
+                            <h3>No Documents Yet</h3>
+                            <p>Upload PDF, DOCX, or TXT files for ${clientName}</p>
+                            <button class="btn btn-primary" onclick="loadClientSampleData()" style="margin-top: 1rem;">
+                                <i class="fas fa-database"></i>
+                                Load Sample Documents
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Documents</h3>
+                        <p>Please try again</p>
+                    </div>
+                `;
+                console.error('Load documents error:', error);
+            }
+        }
+
+        // ===== EMAILS TAB =====
+
+        async function loadEmails() {
+            const content = document.getElementById('emailsContent');
+            
+            if (!isAuthenticated) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-lock"></i>
+                        <h3>Sign In Required</h3>
+                        <p>Please sign in to view email threads</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            if (!currentClientId) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <h3>Select a Client</h3>
+                        <p>Please select a client to view their email threads</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/emails/${currentClientId}/emails`);
+                const data = await response.json();
+                
+                if (data.emails && data.emails.length > 0) {
+                    // Group emails by thread
+                    const threads = {};
+                    data.emails.forEach(email => {
+                        const threadId = email.thread_id || email.gmail_thread_id || 'default';
+                        if (!threads[threadId]) {
+                            threads[threadId] = [];
+                        }
+                        threads[threadId].push(email);
+                    });
+
+                    let threadsHtml = `
+                        <div style="margin-bottom: 1rem;">
+                            <h4>Email Threads for ${data.client_name}</h4>
+                            <p style="color: #64748b; font-size: 0.9rem;">Total: ${data.total_emails} emails in ${Object.keys(threads).length} threads</p>
+                        </div>
+                    `;
+                    
+                    Object.entries(threads).forEach(([threadId, emails]) => {
+                        const firstEmail = emails[0];
+                        const lastEmail = emails[emails.length - 1];
+                        
+                        threadsHtml += `
+                            <div class="content-item">
+                                <div class="content-title">
+                                    <i class="fas fa-envelope"></i>
+                                    ${firstEmail.subject || 'No Subject'}
+                                    <span style="margin-left: auto; font-size: 0.8rem; color: #64748b;">
+                                        ${emails.length} message${emails.length !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                <div class="content-meta" style="margin-bottom: 0.5rem;">
+                                    <strong>Participants:</strong> ${[...new Set(emails.flatMap(e => [e.sender, e.recipient]).filter(Boolean))].join(', ')}
+                                </div>
+                                <div style="max-height: 200px; overflow-y: auto; background: #f8fafc; border-radius: 4px; padding: 0.5rem;">
+                                    ${emails.slice(0, 3).map(email => `
+                                        <div style="border-bottom: 1px solid #e2e8f0; padding: 0.5rem 0; margin-bottom: 0.5rem;">
+                                            <div style="font-weight: 600; font-size: 0.8rem; color: #374151;">
+                                                ${email.sender || 'Unknown'} 
+                                                <span style="font-weight: normal; color: #64748b;">
+                                                    • ${email.date_sent ? new Date(email.date_sent).toLocaleDateString() : 'Unknown date'}
+                                                </span>
+                                            </div>
+                                            <div style="font-size: 0.85rem; color: #374151; line-height: 1.4; margin-top: 0.25rem;">
+                                                ${(email.snippet || email.body || 'No content available').substring(0, 150)}${(email.snippet || email.body || '').length > 150 ? '...' : ''}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                    ${emails.length > 3 ? `<div style="text-align: center; color: #64748b; font-size: 0.8rem;">... and ${emails.length - 3} more messages</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    content.innerHTML = `<div class="content-list">${threadsHtml}</div>`;
+                } else {
+                    const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-envelope"></i>
+                            <h3>No Email Threads</h3>
+                            <p>Connect Gmail to start analyzing email threads for ${clientName}</p>
+                            <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+                                <button class="btn btn-gmail" onclick="connectGmail()">
+                                    <i class="fab fa-google"></i>
+                                    Connect Gmail
+                                </button>
+                                <button class="btn btn-secondary" onclick="loadClientSampleData()">
+                                    <i class="fas fa-database"></i>
+                                    Load Sample Emails
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                content.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Emails</h3>
+                        <p>Please try again or check your Gmail connection</p>
+                    </div>
+                `;
+                console.error('Load emails error:', error);
+            }
+        }
+
+        // ===== GMAIL INTEGRATION =====
+
+        async function connectGmail() {
+            if (!isAuthenticated) {
+                showAlert('Please sign in first to connect Gmail', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.demo_mode || data.auth_url === "#demo") {
+                        // Demo mode - simulate connection
+                        document.getElementById('gmailStatus').style.display = 'block';
+                        document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected (Demo)';
+                        document.getElementById('monitoringPanel').style.display = 'block';
+                        showAlert('Gmail connected successfully (demo mode)!', 'success');
+                        
+                        // Add demo message
+                        addMessage('assistant', '📧 Gmail connected in demo mode! You can now monitor email threads and load sample email conversations for analysis.');
+                    } else {
+                        showAlert('Opening Gmail authentication...', 'info');
+                        
+                        const authWindow = window.open(
+                            data.auth_url, 
+                            'gmail_auth', 
+                            'width=500,height=600,scrollbars=yes,resizable=yes'
+                        );
+                        
+                        // Listen for success message from popup
+                        const messageHandler = function(event) {
+                            if (event.data.type === 'GMAIL_AUTH_SUCCESS') {
+                                document.getElementById('gmailStatus').style.display = 'block';
+                                document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
+                                document.getElementById('monitoringPanel').style.display = 'block';
+                                showAlert('Gmail connected successfully!', 'success');
+                                
+                                // Remove event listener
+                                window.removeEventListener('message', messageHandler);
+                                
+                                if (document.getElementById('emailsTab').classList.contains('active')) {
+                                    loadEmails();
+                                }
+                            }
+                        };
+                        
+                        window.addEventListener('message', messageHandler);
+                    }
+                } else {
+                    showAlert('Failed to get Gmail auth URL. Using demo mode.', 'error');
+                }
+            } catch (error) {
+                showAlert('Gmail connection error. Please try again.', 'error');
+                console.error('Gmail connection error:', error);
+            }
+        }
+
+        async function startThreadMonitoring() {
+            if (!isAuthenticated || !currentClientId) {
+                showAlert('Please sign in and select a client first', 'error');
+                return;
+            }
+
+            const threadSelector = document.getElementById('threadSelector');
+            const selectedThread = threadSelector.value;
+            const threadText = threadSelector.options[threadSelector.selectedIndex].text;
+
+            try {
+                showAlert(`Starting monitoring for ${threadText}...`, 'info');
+                
+                const formData = new FormData();
+                formData.append('thread_id', selectedThread);
+                formData.append('check_interval', '300'); // 5 minutes
+                
+                const response = await fetch(`${API_BASE}/api/emails/${currentClientId}/start-thread-monitoring`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Update monitoring status
+                    document.getElementById('monitoringStatus').style.display = 'block';
+                    document.getElementById('monitoringStatusText').textContent = 'Active';
+                    document.getElementById('startMonitorBtn').innerHTML = '<i class="fas fa-stop"></i> Stop Monitoring';
+                    document.getElementById('startMonitorBtn').onclick = stopThreadMonitoring;
+                    
+                    monitoringActive = true;
+                    updateMonitoringDisplay();
+                    
+                    showAlert(`✅ Now monitoring ${threadText}! Checking every 5 minutes.`, 'success');
+                    
+                    // Add helpful message to chat
+                    addMessage('assistant', `📡 Gmail monitoring started for "${threadText}". I'll automatically detect and process new messages in this thread.`);
+                    
+                    // Start periodic status updates
+                    startMonitoringUpdates();
+                } else {
+                    showAlert('Failed to start monitoring. Please try again.', 'error');
+                }
+            } catch (error) {
+                showAlert('Error starting monitoring. Please try again.', 'error');
+                console.error('Start monitoring error:', error);
+            }
+        }
+
+        async function stopThreadMonitoring() {
+            try {
+                const threadSelector = document.getElementById('threadSelector');
+                const selectedThread = threadSelector.value;
+                
+                const formData = new FormData();
+                formData.append('thread_id', selectedThread);
+                
+                const response = await fetch(`${API_BASE}/api/emails/stop-thread-monitoring`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('monitoringStatusText').textContent = 'Inactive';
+                    document.getElementById('startMonitorBtn').innerHTML = '<i class="fas fa-play"></i> Start Monitoring';
+                    document.getElementById('startMonitorBtn').onclick = startThreadMonitoring;
+                    
+                    monitoringActive = false;
+                    if (monitoringInterval) {
+                        clearInterval(monitoringInterval);
+                    }
+                    
+                    showAlert('Monitoring stopped', 'success');
+                }
+            } catch (error) {
+                showAlert('Error stopping monitoring', 'error');
+                console.error('Stop monitoring error:', error);
+            }
+        }
+
+        function startMonitoringUpdates() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+            }
+            
+            monitoringInterval = setInterval(updateMonitoringDisplay, 30000); // Update every 30 seconds
+        }
+
+        async function updateMonitoringDisplay() {
+            if (!monitoringActive) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/emails/monitoring-status`);
+                const data = await response.json();
+                
+                if (data.active_monitors && data.active_monitors.length > 0) {
+                    const monitor = data.active_monitors[0];
+                    document.getElementById('lastCheckTime').textContent = 
+                        new Date(monitor.last_check).toLocaleTimeString();
+                    document.getElementById('messagesFound').textContent = monitor.messages_found;
+                }
+            } catch (error) {
+                console.error('Error updating monitoring display:', error);
+            }
+        }
+
+        function resetGmailStatus() {
+            document.getElementById('gmailStatus').style.display = 'none';
+            document.getElementById('gmailBtn').innerHTML = '<i class="fab fa-google"></i> Connect Gmail';
+            document.getElementById('monitoringPanel').style.display = 'none';
+            
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringActive = false;
+            }
+        }
+
+        // ===== DEMO AND UTILITIES =====
+
+        async function initializeFullDemo() {
+            try {
+                showAlert('Initializing full demo with sample legal data...', 'info');
+                
+                const response = await fetch(`${API_BASE}/api/demo/initialize-full`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('✅ Full demo initialized! Sample clients and data are ready.', 'success');
+                    
+                    // Reload clients
+                    await loadClients(); 
+                    
+                    // Simulate Gmail connection
+                    document.getElementById('gmailStatus').style.display = 'block';
+                    document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected (Demo)';
+                    document.getElementById('monitoringPanel').style.display = 'block';
+                    
+                    // Add welcome message
+                    addMessage('assistant', `🎉 **Demo Environment Ready!**
+
+I've set up sample legal data including:
+• **Lexsy, Inc.** with advisor equity grant discussion (6 emails)
+• **TechCorp LLC** for comparison (empty - you can add data)
+• Legal documents: Board approvals, advisor agreements, equity plans
+• Gmail monitoring capabilities
+
+**Try asking questions like:**
+• "What equity grant was proposed for John Smith?"
+• "What are the vesting terms discussed in emails?"
+• "How many shares are available in our equity incentive plan?"
+• "What documentation is needed for the advisor agreement?"
+
+Select **Lexsy, Inc.** from the client dropdown to get started!`);
+                    
+                } else {
+                    showAlert('Demo initialization failed. Please try again.', 'error');
+                }
+
+            } catch (error) {
+                showAlert('Demo initialization failed. Please try again.', 'error');
+                console.error('Demo initialization error:', error);
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear all client data? This action cannot be undone.')) {
+                // Clear local storage (except user auth)
+                const userKey = localStorage.getItem('aiAssistantUser');
+                localStorage.clear();
+                if (userKey) {
+                    localStorage.setItem('aiAssistantUser', userKey);
+                }
+
+                // Reset application state
+                currentClientId = null;
+                availableClients = [];
+                
+                // Stop monitoring
+                if (monitoringInterval) {
+                    clearInterval(monitoringInterval);
+                    monitoringActive = false;
+                }
+
+                // Reset UI
+                resetAppState();
+                showAlert('All data cleared successfully', 'success');
+                
+                // Add reset message
+                addMessage('assistant', '🔄 All client data has been cleared. You can now create new clients or initialize the demo again.');
+            }
+        }
+
+        function showAlert(message, type = 'info') {
+            // Remove existing alerts
+            const existingAlerts = document.querySelectorAll('.alert');
+            existingAlerts.forEach(alert => alert.remove());
+
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            
+            const icon = type === 'success' ? 'fa-check-circle' : 
+                        type === 'error' ? 'fa-exclamation-circle' : 
+                        'fa-info-circle';
+            
+            alertDiv.innerHTML = `
+                <i class="fas ${icon}"></i>
+                <span>${message}</span>
+            `;
+
+            const container = document.querySelector('.container') || document.body;
+            container.insertBefore(alertDiv, container.firstChild);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('AI Legal Assistant initialized');
+        });
+    </script>
+</body>
+</html><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -182,6 +1274,15 @@
             background: #e2e8f0;
         }
 
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #b91c1c;
+        }
+
         .btn-gmail {
             background: #4285f4;
             color: white;
@@ -206,6 +1307,12 @@
             border-color: #3b82f6;
             background: #eff6ff;
             transform: translateY(-2px);
+        }
+
+        .upload-zone.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
         }
 
         .upload-icon {
@@ -337,6 +1444,22 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
 
+        .message-sources {
+            margin-top: 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .source-tag {
+            display: inline-block;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            margin-right: 0.5rem;
+            margin-bottom: 0.25rem;
+            color: #64748b;
+        }
+
         .chat-input-container {
             display: flex;
             gap: 0.75rem;
@@ -429,6 +1552,9 @@
             font-weight: 600;
             color: #1e293b;
             margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .content-meta {
@@ -521,53 +1647,29 @@
             max-width: 400px;
         }
 
-        .email-thread {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #e2e8f0;
+        .client-selector {
+            position: relative;
+        }
+
+        .current-client {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
             border-radius: 6px;
-            padding: 1rem;
-            margin-top: 1rem;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
         }
 
-        .email-message {
-            border-bottom: 1px solid #f1f5f9;
-            padding: 1rem 0;
-            margin-bottom: 1rem;
-        }
-
-        .email-message:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-        }
-
-        .email-header {
+        .client-actions {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
         }
 
-        .email-subject {
-            font-weight: 600;
-            color: #1e293b;
-        }
-
-        .email-meta {
-            font-size: 0.75rem;
-            color: #64748b;
-        }
-
-        .email-participants {
+        .client-actions .btn {
+            margin-bottom: 0;
             font-size: 0.8rem;
-            color: #6b7280;
-            margin-bottom: 0.5rem;
-        }
-
-        .email-preview {
-            font-size: 0.85rem;
-            color: #374151;
-            line-height: 1.4;
+            padding: 0.5rem;
         }
 
         .monitoring-panel {
@@ -597,6 +1699,55 @@
             margin-bottom: 1rem;
         }
 
+        .suggestion-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .suggestion-btn {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            color: #374151;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .suggestion-btn:hover {
+            background: #e2e8f0;
+            border-color: #3b82f6;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card {
+            background: #f8fafc;
+            padding: 1rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
         @media (max-width: 768px) {
             .main-grid {
                 grid-template-columns: 1fr;
@@ -613,6 +1764,10 @@
 
             .chat-container {
                 height: 400px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -666,19 +1821,46 @@
         <div class="main-grid">
             <!-- Sidebar -->
             <aside class="sidebar">
-                <!-- Client Selector -->
+                <!-- Client Management -->
                 <div class="section">
-                    <h3><i class="fas fa-users"></i> Client Selection</h3>
-                    <select id="clientSelector" class="form-input" onchange="switchClient()">
-                        <option value="">Select Client...</option>
-                    </select>
-                    <div id="currentClient" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: #f0f9ff; border-radius: 4px; font-size: 0.875rem;">
-                        <strong>Current:</strong> <span id="currentClientName"></span>
+                    <h3><i class="fas fa-users"></i> Client Management</h3>
+                    
+                    <div class="client-selector">
+                        <select id="clientSelector" class="form-input" onchange="switchClient()">
+                            <option value="">Select Client...</option>
+                        </select>
+                        
+                        <div id="currentClient" class="current-client" style="display: none;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong id="currentClientName">Client Name</strong>
+                                    <div style="font-size: 0.75rem; color: #64748b;" id="currentClientStats">
+                                        Loading stats...
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.25rem;">
+                                    <span id="docsIndicator" title="Has Documents" style="display: none;">📄</span>
+                                    <span id="emailsIndicator" title="Has Emails" style="display: none;">📧</span>
+                                </div>
+                            </div>
+                            
+                            <div class="client-actions">
+                                <button class="btn btn-secondary" onclick="loadClientSampleData()" id="loadSampleBtn">
+                                    <i class="fas fa-database"></i>
+                                    Load Sample Data
+                                </button>
+                                <button class="btn btn-danger" onclick="deleteCurrentClient()" id="deleteClientBtn">
+                                    <i class="fas fa-trash"></i>
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <button class="btn btn-secondary" onclick="showAddClientModal()" style="margin-top: 0.5rem;">
+                            <i class="fas fa-plus"></i>
+                            Add New Client
+                        </button>
                     </div>
-                    <button class="btn btn-secondary" onclick="showAddClientModal()" style="margin-top: 0.5rem;">
-                        <i class="fas fa-plus"></i>
-                        Add New Client
-                    </button>
                 </div>
 
                 <!-- Document Upload -->
@@ -690,11 +1872,14 @@
                         </div>
                         <div style="font-weight: 500; margin-bottom: 0.25rem;">Drop files here</div>
                         <div style="font-size: 0.875rem; color: #64748b;">PDF, DOCX, TXT • Max 10MB</div>
+                        <div style="font-size: 0.75rem; color: #ef4444; margin-top: 0.5rem;" id="uploadNote">
+                            Select a client first
+                        </div>
                         <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.txt" style="display: none;">
                     </div>
                 </div>
 
-                <!-- Gmail Integration with Thread Monitoring -->
+                <!-- Gmail Integration -->
                 <div class="section">
                     <h3><i class="fab fa-google"></i> Gmail Integration</h3>
                     <button class="btn btn-gmail" onclick="connectGmail()" id="gmailBtn">
@@ -702,7 +1887,7 @@
                         Connect Gmail
                     </button>
                     <div id="gmailStatus" style="display: none; margin-top: 0.5rem; font-size: 0.875rem; color: #059669;">
-                        <i class="fas fa-check-circle"></i> Gmail connected
+                        <i class="fas fa-check-circle"></i> Gmail connected (Demo)
                     </div>
 
                     <!-- Thread Monitoring Panel -->
@@ -713,7 +1898,7 @@
                         </div>
                         
                         <div class="thread-selector">
-                            <label class="form-label">Select Thread to Monitor:</label>
+                            <label class="form-label">Monitor Thread:</label>
                             <select id="threadSelector" class="form-input">
                                 <option value="mock_thread_equity_001">Advisor Equity Grant (6 messages)</option>
                                 <option value="mock_thread_contract_002">Enterprise Contract (2 messages)</option>
@@ -738,11 +1923,7 @@
                     <h3><i class="fas fa-rocket"></i> Quick Actions</h3>
                     <button class="btn btn-primary" onclick="initializeFullDemo()" id="demoSetupBtn">
                         <i class="fas fa-magic"></i>
-                        Initialize Full Demo
-                    </button>
-                    <button class="btn btn-secondary" onclick="loadSampleData()">
-                        <i class="fas fa-database"></i>
-                        Load Sample Data
+                        Initialize Demo
                     </button>
                     <button class="btn btn-secondary" onclick="clearAllData()">
                         <i class="fas fa-trash-alt"></i>
@@ -773,15 +1954,22 @@
                                 <div class="message-avatar">AI</div>
                                 <div class="message-content">
                                     <div class="message-bubble">
-                                        👋 Hello! I'm your AI legal assistant. Select a client and I'll help you analyze their legal documents and email threads. You can upload documents, connect Gmail, or try the demo with sample legal data.
+                                        👋 Hello! I'm your AI legal assistant. Select a client to get started, then I'll help you analyze their legal documents and email threads. 
+                                        <br><br>
+                                        Try the <strong>Initialize Demo</strong> button to load sample legal data, or create your own client and upload documents.
                                     </div>
                                 </div>
                             </div>
                         </div>
 
+                        <!-- Suggested Questions -->
+                        <div id="suggestedQuestions" class="suggestion-buttons" style="display: none;">
+                            <!-- Questions will be populated dynamically -->
+                        </div>
+
                         <div class="chat-input-container">
                             <textarea id="chatInput" class="chat-input" placeholder="Select a client first, then ask about their legal matters..." rows="1" disabled></textarea>
-                            <button class="send-btn" onclick="sendMessage()" id="sendBtn">
+                            <button class="send-btn" onclick="sendMessage()" id="sendBtn" disabled>
                                 <i class="fas fa-paper-plane"></i>
                             </button>
                         </div>
@@ -837,6 +2025,7 @@
             </form>
         </div>
     </div>
+
     <script>
         // Global state
         let currentUser = null;
@@ -912,7 +2101,26 @@
             document.getElementById('userInfo').style.display = 'none';
             
             document.querySelector('.auth-form').reset();
-            showAlert('Logged out successfully', 'success');
+            resetAppState();
+        }
+
+        function resetAppState() {
+            // Reset client selector
+            const selector = document.getElementById('clientSelector');
+            selector.innerHTML = '<option value="">Select Client...</option>';
+            document.getElementById('currentClient').style.display = 'none';
+            
+            // Reset upload zone
+            updateUploadZone();
+            
+            // Reset tab contents
+            resetTabContents();
+            
+            // Reset chat
+            resetChat();
+            
+            // Reset Gmail status
+            resetGmailStatus();
         }
 
         function setupEventListeners() {
@@ -920,7 +2128,11 @@
             const uploadZone = document.getElementById('uploadZone');
             const fileInput = document.getElementById('fileInput');
 
-            uploadZone.addEventListener('click', () => fileInput.click());
+            uploadZone.addEventListener('click', () => {
+                if (currentClientId) {
+                    fileInput.click();
+                }
+            });
             uploadZone.addEventListener('dragover', handleDragOver);
             uploadZone.addEventListener('dragleave', handleDragLeave);
             uploadZone.addEventListener('drop', handleFileDrop);
@@ -938,1112 +2150,4 @@
             // Auto-resize textarea
             chatInput.addEventListener('input', function() {
                 this.style.height = 'auto';
-                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-            });
-
-            // Close modal when clicking outside
-            window.addEventListener('click', function(event) {
-                const modal = document.getElementById('addClientModal');
-                if (event.target === modal) {
-                    hideAddClientModal();
-                }
-            });
-        }
-        // Client management functions
-        async function loadClients() {
-            try {
-                const response = await fetch(`${API_BASE}/api/clients`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    availableClients = data.clients || [];
-                    
-                    const selector = document.getElementById('clientSelector');
-                    selector.innerHTML = '<option value="">Select Client...</option>';
-                    
-                    availableClients.forEach(client => {
-                        const option = document.createElement('option');
-                        option.value = client.id;
-                        option.textContent = `${client.name} (${client.company})`;
-                        selector.appendChild(option);
-                    });
-                    
-                    // Auto-select first client for demo
-                    if (availableClients.length > 0) {
-                        selector.value = availableClients[0].id;
-                        switchClient();
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Error loading clients:', error);
-                showAlert('Failed to load clients', 'error');
-            }
-        }
-
-        async function switchClient() {
-            const selector = document.getElementById('clientSelector');
-            const clientId = selector.value;
-            
-            if (!clientId) {
-                currentClientId = null;
-                document.getElementById('currentClient').style.display = 'none';
-                updateChatPlaceholder();
-                return;
-            }
-            
-            try {
-                currentClientId = parseInt(clientId);
-                const client = availableClients.find(c => c.id == clientId);
-                
-                if (client) {
-                    document.getElementById('currentClientName').textContent = client.name;
-                    document.getElementById('currentClient').style.display = 'block';
-                    
-                    showAlert(`Switched to ${client.name}`, 'success');
-                    
-                    // Refresh current tab content
-                    const activeTab = document.querySelector('.tab.active');
-                    if (activeTab.textContent.includes('Documents')) {
-                        loadDocuments();
-                    } else if (activeTab.textContent.includes('Email')) {
-                        loadEmails();
-                    }
-                    
-                    updateChatPlaceholder();
-                    addMessage('assistant', `🔄 Switched to client: **${client.name}**. You can now ask questions about their documents and emails.`);
-                }
-            } catch (error) {
-                showAlert('Failed to switch client', 'error');
-            }
-        }
-
-        function updateChatPlaceholder() {
-            const chatInput = document.getElementById('chatInput');
-            if (currentClientId) {
-                const client = availableClients.find(c => c.id === currentClientId);
-                chatInput.placeholder = `Ask questions about ${client?.name || 'this client'}'s legal matters...`;
-                chatInput.disabled = false;
-            } else {
-                chatInput.placeholder = 'Select a client first, then ask about their legal matters...';
-                chatInput.disabled = true;
-            }
-        }
-
-        function showAddClientModal() {
-            document.getElementById('addClientModal').style.display = 'block';
-        }
-
-        function hideAddClientModal() {
-            document.getElementById('addClientModal').style.display = 'none';
-            document.getElementById('addClientForm').reset();
-        }
-
-        async function addNewClient(event) {
-            event.preventDefault();
-            
-            const formData = new FormData();
-            formData.append('name', document.getElementById('newClientName').value);
-            formData.append('email', document.getElementById('newClientEmail').value);
-            formData.append('company', document.getElementById('newClientCompany').value);
-            formData.append('description', document.getElementById('newClientDescription').value);
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/clients`, {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showAlert(`Client ${data.client.name} added successfully!`, 'success');
-                    hideAddClientModal();
-                    loadClients();
-                } else {
-                    showAlert(`Failed to add client: ${data.error}`, 'error');
-                }
-            } catch (error) {
-                showAlert('Error adding client', 'error');
-            }
-        }
-        // File upload functions
-        function handleDragOver(e) {
-            e.preventDefault();
-            e.currentTarget.classList.add('dragover');
-        }
-
-        function handleDragLeave(e) {
-            e.preventDefault();
-            e.currentTarget.classList.remove('dragover');
-        }
-
-        function handleFileDrop(e) {
-            e.preventDefault();
-            e.currentTarget.classList.remove('dragover');
-            
-            if (!isAuthenticated) {
-                showAlert('Please sign in first to upload files', 'error');
-                return;
-            }
-            
-            if (!currentClientId) {
-                showAlert('Please select a client first to upload files', 'error');
-                return;
-            }
-            
-            const files = Array.from(e.dataTransfer.files);
-            handleFiles(files);
-        }
-
-        function handleFileSelect(e) {
-            if (!isAuthenticated) {
-                showAlert('Please sign in first to upload files', 'error');
-                return;
-            }
-            
-            if (!currentClientId) {
-                showAlert('Please select a client first to upload files', 'error');
-                return;
-            }
-            
-            const files = Array.from(e.target.files);
-            handleFiles(files);
-        }
-
-        function handleFiles(files) {
-            const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
-            const maxSize = 10 * 1024 * 1024; // 10MB
-
-            files.forEach(file => {
-                if (!validTypes.includes(file.type)) {
-                    showAlert(`Unsupported file type: ${file.name}. Use PDF, DOCX, or TXT.`, 'error');
-                    return;
-                }
-
-                if (file.size > maxSize) {
-                    showAlert(`File too large: ${file.name}. Max size is 10MB.`, 'error');
-                    return;
-                }
-
-                uploadFile(file);
-            });
-        }
-
-        async function uploadFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('client_id', currentClientId.toString());
-
-            try {
-                showAlert(`Uploading ${file.name}...`, 'info');
-
-                const response = await fetch(`${API_BASE}/api/documents/upload`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    showAlert(`${file.name} uploaded and analyzed successfully!`, 'success');
-                    
-                    // Refresh documents tab
-                    if (document.getElementById('documentsTab').classList.contains('active')) {
-                        loadDocuments();
-                    }
-
-                    // Add welcome message about the uploaded document
-                    setTimeout(() => {
-                        const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
-                        addMessage('assistant', `📄 I've analyzed "${file.name}" for ${clientName}. You can now ask questions about its contents!`);
-                    }, 1000);
-
-                } else {
-                    showAlert(`Upload failed: ${result.error}`, 'error');
-                }
-            } catch (error) {
-                showAlert(`Upload error: ${error.message}`, 'error');
-            }
-        }
-
-        // Chat functions
-        async function sendMessage() {
-            if (!isAuthenticated) {
-                showAlert('Please sign in first', 'error');
-                return;
-            }
-            
-            if (!currentClientId) {
-                showAlert('Please select a client first', 'error');
-                return;
-            }
-
-            const input = document.getElementById('chatInput');
-            const message = input.value.trim();
-            
-            if (!message) return;
-            
-            // Add user message
-            addMessage('user', message);
-            input.value = '';
-            input.style.height = 'auto';
-            
-            // Show typing indicator
-            showTypingIndicator();
-            
-            // Disable send button
-            const sendBtn = document.getElementById('sendBtn');
-            sendBtn.disabled = true;
-            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            
-            try {
-                const formData = new FormData();
-                formData.append('question', message);
-                formData.append('client_id', currentClientId.toString());
-                formData.append('user_context', JSON.stringify(currentUser));
-                
-                const response = await fetch(`${API_BASE}/api/chat/ask`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                
-                const data = await response.json();
-                
-                // Remove typing indicator
-                hideTypingIndicator();
-                
-                if (data.success) {
-                    addMessage('assistant', data.answer, data.sources);
-                } else {
-                    addMessage('assistant', '❌ Sorry, I encountered an error analyzing your request. Please try again.');
-                }
-            } catch (error) {
-                hideTypingIndicator();
-                addMessage('assistant', '❌ Connection error. Please check your internet connection and try again.');
-            } finally {
-                // Re-enable send button
-                sendBtn.disabled = false;
-                sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
-            }
-        }
-
-        function addMessage(sender, content, sources = null) {
-            const messagesContainer = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}`;
-            
-            let sourcesHtml = '';
-            if (sources && sources.length > 0) {
-                sourcesHtml = '<div style="margin-top: 0.75rem; font-size: 0.8rem;">';
-                sourcesHtml += '<strong>Sources:</strong><br>';
-                sources.forEach(source => {
-                    const icon = source.type === 'document' ? 'fa-file-pdf' : 'fa-envelope';
-                    const name = source.filename || source.subject || 'Source';
-                    sourcesHtml += `<span style="display: inline-block; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 0.25rem 0.5rem; border-radius: 4px; margin-right: 0.5rem; margin-bottom: 0.25rem; color: #64748b;"><i class="fas ${icon}"></i> ${name}</span>`;
-                });
-                sourcesHtml += '</div>';
-            }
-            
-            messageDiv.innerHTML = `
-                <div class="message-avatar">${sender === 'user' ? currentUser.name.charAt(0).toUpperCase() : 'AI'}</div>
-                <div class="message-content">
-                    <div class="message-bubble">${content}</div>
-                    ${sourcesHtml}
-                </div>
-            `;
-            
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function showTypingIndicator() {
-            const messagesContainer = document.getElementById('chatMessages');
-            const typingDiv = document.createElement('div');
-            typingDiv.className = 'message assistant';
-            typingDiv.id = 'typingIndicator';
-            
-            typingDiv.innerHTML = `
-                <div class="message-avatar">AI</div>
-                <div class="message-content">
-                    <div class="message-bubble">
-                        <div class="typing-indicator">
-                            <span>Analyzing</span>
-                            <div class="typing-dots">
-                                <div class="typing-dot"></div>
-                                <div class="typing-dot"></div>
-                                <div class="typing-dot"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            messagesContainer.appendChild(typingDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        function hideTypingIndicator() {
-            const indicator = document.getElementById('typingIndicator');
-            if (indicator) {
-                indicator.remove();
-            }
-        }
-        // Gmail integration functions
-        async function connectGmail() {
-            if (!isAuthenticated) {
-                showAlert('Please sign in first to connect Gmail', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`, {
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.success) {
-                    if (data.demo_mode) {
-                        // Demo mode - simulate connection
-                        document.getElementById('gmailStatus').style.display = 'block';
-                        document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected (Demo)';
-                        document.getElementById('monitoringPanel').style.display = 'block';
-                        showAlert('Gmail connected successfully (demo mode)!', 'success');
-                    } else {
-                        showAlert('Opening Gmail authentication...', 'info');
-                        
-                        const authWindow = window.open(
-                            data.auth_url, 
-                            'gmail_auth', 
-                            'width=500,height=600,scrollbars=yes,resizable=yes'
-                        );
-                        
-                        // Listen for success message from popup
-                        const messageHandler = function(event) {
-                            if (event.data.type === 'GMAIL_AUTH_SUCCESS') {
-                                document.getElementById('gmailStatus').style.display = 'block';
-                                document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
-                                document.getElementById('monitoringPanel').style.display = 'block';
-                                showAlert('Gmail connected successfully!', 'success');
-                                
-                                // Remove event listener
-                                window.removeEventListener('message', messageHandler);
-                                
-                                if (document.getElementById('emailsTab').classList.contains('active')) {
-                                    loadEmails();
-                                }
-                            }
-                        };
-                        
-                        window.addEventListener('message', messageHandler);
-                    }
-                } else {
-                    showAlert('Failed to get Gmail auth URL. Using demo mode.', 'error');
-                }
-            } catch (error) {
-                showAlert('Gmail connection error. Please try again.', 'error');
-            }
-        }
-
-        async function startThreadMonitoring() {
-            if (!isAuthenticated) {
-                showAlert('Please sign in first', 'error');
-                return;
-            }
-
-            if (!currentClientId) {
-                showAlert('Please select a client first', 'error');
-                return;
-            }
-
-            const threadSelector = document.getElementById('threadSelector');
-            const selectedThread = threadSelector.value;
-            const threadText = threadSelector.options[threadSelector.selectedIndex].text;
-
-            try {
-                showAlert(`Starting monitoring for ${threadText}...`, 'info');
-                
-                const formData = new FormData();
-                formData.append('thread_id', selectedThread);
-                formData.append('client_id', currentClientId.toString());
-                formData.append('check_interval', '300'); // 5 minutes
-                
-                const response = await fetch(`${API_BASE}/api/emails/start-thread-monitoring`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    // Update monitoring status
-                    document.getElementById('monitoringStatus').style.display = 'block';
-                    document.getElementById('monitoringStatusText').textContent = 'Active';
-                    document.getElementById('startMonitorBtn').innerHTML = '<i class="fas fa-stop"></i> Stop Monitoring';
-                    document.getElementById('startMonitorBtn').onclick = stopThreadMonitoring;
-                    
-                    monitoringActive = true;
-                    updateMonitoringDisplay();
-                    
-                    showAlert(`✅ Now monitoring ${threadText}! Checking every 5 minutes.`, 'success');
-                    
-                    // Add helpful message to chat
-                    setTimeout(() => {
-                        addMessage('assistant', `📡 Gmail monitoring started for "${threadText}". I'll automatically detect and process new messages in this thread.`);
-                    }, 1000);
-                    
-                    // Start periodic status updates
-                    startMonitoringUpdates();
-                } else {
-                    showAlert('Failed to start monitoring. Please try again.', 'error');
-                }
-            } catch (error) {
-                showAlert('Error starting monitoring. Please try again.', 'error');
-            }
-        }
-
-        async function stopThreadMonitoring() {
-            try {
-                const threadSelector = document.getElementById('threadSelector');
-                const selectedThread = threadSelector.value;
-                
-                const formData = new FormData();
-                formData.append('thread_id', selectedThread);
-                formData.append('client_id', currentClientId.toString());
-                
-                const response = await fetch(`${API_BASE}/api/emails/stop-thread-monitoring`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    document.getElementById('monitoringStatusText').textContent = 'Inactive';
-                    document.getElementById('startMonitorBtn').innerHTML = '<i class="fas fa-play"></i> Start Monitoring';
-                    document.getElementById('startMonitorBtn').onclick = startThreadMonitoring;
-                    
-                    monitoringActive = false;
-                    if (monitoringInterval) {
-                        clearInterval(monitoringInterval);
-                    }
-                    
-                    showAlert('Monitoring stopped', 'success');
-                }
-            } catch (error) {
-                showAlert('Error stopping monitoring', 'error');
-            }
-        }
-
-        function startMonitoringUpdates() {
-            if (monitoringInterval) {
-                clearInterval(monitoringInterval);
-            }
-            
-            monitoringInterval = setInterval(updateMonitoringDisplay, 30000); // Update every 30 seconds
-        }
-
-        async function updateMonitoringDisplay() {
-            if (!monitoringActive) return;
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/emails/monitoring-status`, {
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.active_monitors && data.active_monitors.length > 0) {
-                    const monitor = data.active_monitors[0];
-                    document.getElementById('lastCheckTime').textContent = 
-                        new Date(monitor.last_check).toLocaleTimeString();
-                    document.getElementById('messagesFound').textContent = monitor.messages_found;
-                }
-            } catch (error) {
-                console.error('Error updating monitoring display:', error);
-            }
-        }
-
-        // Tab switching
-        function switchTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-
-            // Show selected tab
-            document.getElementById(tabName + 'Tab').classList.add('active');
-            event.target.classList.add('active');
-
-            // Load content
-            if (tabName === 'documents') {
-                loadDocuments();
-            } else if (tabName === 'emails') {
-                loadEmails();
-            }
-        }
-
-        // Load content functions
-        async function loadDocuments() {
-            const content = document.getElementById('documentsContent');
-            
-            if (!isAuthenticated) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-lock"></i>
-                        <h3>Sign In Required</h3>
-                        <p>Please sign in to view documents</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            if (!currentClientId) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-users"></i>
-                        <h3>Select a Client</h3>
-                        <p>Please select a client to view their documents</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/documents/list?client_id=${currentClientId}`, {
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.documents && data.documents.length > 0) {
-                    content.innerHTML = `
-                        <div class="content-list">
-                            ${data.documents.map(doc => `
-                                <div class="content-item">
-                                    <div class="content-title">
-                                        <i class="fas fa-file-${doc.file_type === 'pdf' ? 'pdf' : 'alt'}"></i>
-                                        ${doc.original_filename || doc.filename}
-                                    </div>
-                                    <div class="content-meta">
-                                        ${doc.file_type ? doc.file_type.toUpperCase() : 'DOC'} • ${Math.round((doc.file_size || 0) / 1024)} KB
-                                        <span style="color: ${doc.processing_status === 'completed' ? '#059669' : '#d97706'};">
-                                            ${doc.processing_status === 'completed' ? '✅ Ready' : '⏳ Processing'}
-                                        </span>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                } else {
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fas fa-file-alt"></i>
-                            <h3>No Documents Yet</h3>
-                            <p>Upload PDF, DOCX, or TXT files for this client</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Error Loading Documents</h3>
-                        <p>Please try again</p>
-                    </div>
-                `;
-            }
-        }
-        async function loadEmails() {
-            const content = document.getElementById('emailsContent');
-            
-            if (!isAuthenticated) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-lock"></i>
-                        <h3>Sign In Required</h3>
-                        <p>Please sign in to view email threads</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            if (!currentClientId) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-users"></i>
-                        <h3>Select a Client</h3>
-                        <p>Please select a client to view their email threads</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/emails/list?client_id=${currentClientId}`, {
-                    headers: {
-                        'X-User-Email': currentUser.email,
-                        'X-User-Name': currentUser.name
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.emails && data.emails.length > 0) {
-                    // Group emails by thread
-                    const threads = {};
-                    data.emails.forEach(email => {
-                        const threadId = email.thread_id || email.gmail_thread_id || 'default';
-                        if (!threads[threadId]) {
-                            threads[threadId] = [];
-                        }
-                        threads[threadId].push(email);
-                    });
-
-                    let threadsHtml = '';
-                    Object.entries(threads).forEach(([threadId, emails]) => {
-                        const firstEmail = emails[0];
-                        
-                        threadsHtml += `
-                            <div class="content-item">
-                                <div class="email-header">
-                                    <div class="email-subject">
-                                    <div class="email-subject">
-                                        <i class="fas fa-envelope"></i>
-                                        ${firstEmail.subject || 'No Subject'}
-                                    </div>
-                                    <div class="email-meta">
-                                        ${emails.length} message${emails.length !== 1 ? 's' : ''}
-                                    </div>
-                                </div>
-                                <div class="email-participants">
-                                    <strong>Participants:</strong> ${[...new Set(emails.flatMap(e => [e.sender, e.recipient]).filter(Boolean))].join(', ')}
-                                </div>
-                                <div class="email-thread">
-                                    ${emails.map(email => `
-                                        <div class="email-message">
-                                            <div class="email-header">
-                                                <strong>${email.sender || 'Unknown'}</strong>
-                                                <span class="email-meta">${new Date(email.received_at || email.date || Date.now()).toLocaleDateString()}</span>
-                                            </div>
-                                            <div class="email-preview">
-                                                ${(email.preview || email.content || 'No content available').substring(0, 200)}${(email.preview || email.content || '').length > 200 ? '...' : ''}
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    content.innerHTML = `<div class="content-list">${threadsHtml}</div>`;
-                } else {
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fas fa-envelope"></i>
-                            <h3>No Email Threads</h3>
-                            <p>Connect Gmail to start analyzing email threads for this client</p>
-                            <button class="btn btn-primary" onclick="connectGmail()" style="margin-top: 1rem;">
-                                <i class="fab fa-google"></i>
-                                Connect Gmail
-                            </button>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Error Loading Emails</h3>
-                        <p>Please try again or check your Gmail connection</p>
-                    </div>
-                `;
-            }
-        }
-
-        // Utility functions
-        function showAlert(message, type = 'info') {
-            // Remove existing alerts
-            const existingAlerts = document.querySelectorAll('.alert');
-            existingAlerts.forEach(alert => alert.remove());
-
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            
-            const icon = type === 'success' ? 'fa-check-circle' : 
-                        type === 'error' ? 'fa-exclamation-circle' : 
-                        'fa-info-circle';
-            
-            alertDiv.innerHTML = `
-                <i class="fas ${icon}"></i>
-                <span>${message}</span>
-            `;
-
-            const container = document.querySelector('.container') || document.body;
-            container.insertBefore(alertDiv, container.firstChild);
-
-            // Auto-remove after 5 seconds
-            setTimeout(() => {
-                if (alertDiv.parentNode) {
-                    alertDiv.remove();
-                }
-            }, 5000);
-        }
-
-        // Demo and sample data functions
-        async function initializeFullDemo() {
-            try {
-                showAlert('Initializing full demo with sample legal data...', 'info');
-                
-                // Create sample clients
-                const sampleClients = [
-                    {
-                        name: 'TechStart Inc.',
-                        email: 'legal@techstart.com',
-                        company: 'TechStart Inc.',
-                        description: 'Early-stage SaaS startup seeking equity structure and employment law guidance'
-                    },
-                    {
-                        name: 'Global Corp',
-                        email: 'contracts@globalcorp.com',
-                        company: 'Global Corp',
-                        description: 'Large enterprise requiring contract review and compliance analysis'
-                    },
-                    {
-                        name: 'Innovation Labs',
-                        email: 'ip@innovationlabs.org',
-                        company: 'Innovation Labs',
-                        description: 'R&D company focusing on intellectual property and licensing agreements'
-                    }
-                ];
-
-                // Add sample clients
-                for (const client of sampleClients) {
-                    const formData = new FormData();
-                    Object.keys(client).forEach(key => {
-                        formData.append(key, client[key]);
-                    });
-
-                    await fetch(`${API_BASE}/api/clients`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                }
-
-                // Reload clients
-                await loadClients();
-
-                // Simulate Gmail connection
-                document.getElementById('gmailStatus').style.display = 'block';
-                document.getElementById('gmailBtn').innerHTML = '<i class="fas fa-check"></i> Gmail Connected (Demo)';
-                document.getElementById('monitoringPanel').style.display = 'block';
-
-                // Add sample documents and emails for the first client
-                await loadSampleData();
-
-                showAlert('✅ Full demo initialized! Sample clients, documents, and email threads are ready.', 'success');
-                
-                // Add welcome message
-                setTimeout(() => {
-                    addMessage('assistant', `🎉 **Demo Environment Ready!**\n\nI've set up sample legal data including:\n• 3 sample clients with different legal needs\n• Mock legal documents (contracts, agreements, policies)\n• Simulated email threads with legal discussions\n• Gmail monitoring capabilities\n\nTry asking questions like:\n• "What are the key risks in TechStart's equity agreement?"\n• "Summarize the main terms in the enterprise contract"\n• "What compliance issues should Global Corp be aware of?"`);
-                }, 1000);
-
-            } catch (error) {
-                showAlert('Demo initialization failed. Please try again.', 'error');
-            }
-        }
-
-        async function loadSampleData() {
-            if (!currentClientId) {
-                showAlert('Please select a client first', 'error');
-                return;
-            }
-
-            try {
-                showAlert('Loading sample legal documents and email threads...', 'info');
-
-                // Create sample documents
-                const sampleDocuments = [
-                    {
-                        filename: 'employee_equity_agreement.pdf',
-                        content: 'Sample equity agreement content with vesting schedules and exercise provisions',
-                        file_type: 'pdf',
-                        processing_status: 'completed'
-                    },
-                    {
-                        filename: 'enterprise_software_contract.docx',
-                        content: 'Enterprise software licensing agreement with liability limitations and data processing terms',
-                        file_type: 'docx',
-                        processing_status: 'completed'
-                    },
-                    {
-                        filename: 'privacy_policy_update.txt',
-                        content: 'Updated privacy policy addressing GDPR compliance and data retention policies',
-                        file_type: 'txt',
-                        processing_status: 'completed'
-                    }
-                ];
-
-                // Add sample documents
-                for (const doc of sampleDocuments) {
-                    const formData = new FormData();
-                    formData.append('client_id', currentClientId.toString());
-                    Object.keys(doc).forEach(key => {
-                        formData.append(key, doc[key]);
-                    });
-
-                    await fetch(`${API_BASE}/api/documents`, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-User-Email': currentUser.email,
-                            'X-User-Name': currentUser.name
-                        }
-                    });
-                }
-
-                // Create sample email threads
-                const sampleEmails = [
-                    {
-                        thread_id: 'thread_equity_001',
-                        subject: 'Advisor Equity Grant - Legal Review Needed',
-                        sender: 'ceo@techstart.com',
-                        recipient: 'legal@lawfirm.com',
-                        content: 'We need to review the equity grant structure for our new technical advisor. The proposed 0.5% equity stake with 4-year vesting seems standard, but we want to ensure proper legal protections.',
-                        date: new Date(Date.now() - 86400000).toISOString(),
-                        client_id: currentClientId
-                    },
-                    {
-                        thread_id: 'thread_equity_001',
-                        subject: 'Re: Advisor Equity Grant - Legal Review Needed',
-                        sender: 'legal@lawfirm.com',
-                        recipient: 'ceo@techstart.com',
-                        content: 'I\'ve reviewed the proposed equity structure. We should include specific performance milestones and intellectual property assignment clauses. Also recommend adding a clawback provision for early termination.',
-                        date: new Date(Date.now() - 43200000).toISOString(),
-                        client_id: currentClientId
-                    },
-                    {
-                        thread_id: 'thread_contract_002',
-                        subject: 'Enterprise Contract - Liability Concerns',
-                        sender: 'contracts@globalcorp.com',
-                        recipient: 'legal@lawfirm.com',
-                        content: 'Our enterprise client is pushing back on the liability limitation clauses in section 8.3. They want unlimited liability for data breaches. How should we respond?',
-                        date: new Date(Date.now() - 172800000).toISOString(),
-                        client_id: currentClientId
-                    }
-                ];
-
-                // Add sample emails
-                for (const email of sampleEmails) {
-                    const formData = new FormData();
-                    Object.keys(email).forEach(key => {
-                        formData.append(key, email[key]);
-                    });
-
-                    await fetch(`${API_BASE}/api/emails`, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-User-Email': currentUser.email,
-                            'X-User-Name': currentUser.name
-                        }
-                    });
-                }
-
-                showAlert('Sample legal data loaded successfully!', 'success');
-
-                // Refresh current tab if documents or emails
-                const activeTab = document.querySelector('.tab.active');
-                if (activeTab && activeTab.textContent.includes('Documents')) {
-                    loadDocuments();
-                } else if (activeTab && activeTab.textContent.includes('Email')) {
-                    loadEmails();
-                }
-
-            } catch (error) {
-                showAlert('Failed to load sample data', 'error');
-            }
-        }
-
-        function clearAllData() {
-            if (confirm('Are you sure you want to clear all client data? This action cannot be undone.')) {
-                // Clear local storage
-                const userKey = localStorage.getItem('aiAssistantUser');
-                localStorage.clear();
-                if (userKey) {
-                    localStorage.setItem('aiAssistantUser', userKey);
-                }
-
-                // Reset UI state
-                currentClientId = null;
-                availableClients = [];
-                
-                // Clear client selector
-                const selector = document.getElementById('clientSelector');
-                selector.innerHTML = '<option value="">Select Client...</option>';
-                document.getElementById('currentClient').style.display = 'none';
-
-                // Clear tab contents
-                document.getElementById('documentsContent').innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-file-alt"></i>
-                        <h3>No Documents Yet</h3>
-                        <p>Select a client and upload PDF, DOCX, or TXT files to start analysis</p>
-                    </div>
-                `;
-                
-                document.getElementById('emailsContent').innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-envelope"></i>
-                        <h3>No Email Threads</h3>
-                        <p>Select a client and connect Gmail to analyze email threads</p>
-                    </div>
-                `;
-
-                // Clear chat messages (keep initial message)
-                const chatMessages = document.getElementById('chatMessages');
-                chatMessages.innerHTML = `
-                    <div class="message assistant">
-                        <div class="message-avatar">AI</div>
-                        <div class="message-content">
-                            <div class="message-bubble">
-                                👋 Hello! I'm your AI legal assistant. Select a client and I'll help you analyze their legal documents and email threads. You can upload documents, connect Gmail, or try the demo with sample legal data.
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-                // Reset Gmail status
-                document.getElementById('gmailStatus').style.display = 'none';
-                document.getElementById('gmailBtn').innerHTML = '<i class="fab fa-google"></i> Connect Gmail';
-                document.getElementById('monitoringPanel').style.display = 'none';
-
-                // Stop monitoring
-                if (monitoringInterval) {
-                    clearInterval(monitoringInterval);
-                    monitoringActive = false;
-                }
-
-                updateChatPlaceholder();
-                showAlert('All data cleared successfully', 'success');
-            }
-        }
-
-        // Mock API responses for demo mode
-        function createMockAPIResponse(endpoint, data) {
-            // This would typically handle API calls in a real implementation
-            // For demo purposes, we'll simulate successful responses
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    resolve({
-                        success: true,
-                        data: data,
-                        demo_mode: true
-                    });
-                }, Math.random() * 1000 + 500); // Random delay between 500-1500ms
-            });
-        }
-
-        // Initialize app state
-        function initializeApp() {
-            // Set API base URL
-            if (!window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
-                // In production, you would set your actual API URL
-                console.log('Production mode - update API_BASE URL');
-            }
-
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Ctrl/Cmd + Enter to send message
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                    if (document.getElementById('chatInput') === document.activeElement) {
-                        sendMessage();
-                    }
-                }
-                
-                // Escape to close modals
-                if (e.key === 'Escape') {
-                    hideAddClientModal();
-                }
-            });
-
-            // Initialize tooltips and other UI enhancements
-            addUIEnhancements();
-        }
-
-        function addUIEnhancements() {
-            // Add hover effects and tooltips
-            const buttons = document.querySelectorAll('.btn');
-            buttons.forEach(btn => {
-                btn.addEventListener('mouseenter', function() {
-                    if (!this.disabled) {
-                        this.style.transform = 'translateY(-1px)';
-                    }
-                });
-                
-                btn.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0)';
-                });
-            });
-
-            // Auto-save draft messages
-            const chatInput = document.getElementById('chatInput');
-            chatInput.addEventListener('input', function() {
-                if (currentClientId) {
-                    localStorage.setItem(`draft_message_${currentClientId}`, this.value);
-                }
-            });
-
-            // Restore draft messages when switching clients
-            function restoreDraft() {
-                if (currentClientId) {
-                    const draft = localStorage.getItem(`draft_message_${currentClientId}`);
-                    if (draft) {
-                        chatInput.value = draft;
-                    }
-                }
-            }
-
-            // Enhanced file upload feedback
-            const fileInput = document.getElementById('fileInput');
-            fileInput.addEventListener('change', function() {
-                const files = Array.from(this.files);
-                if (files.length > 0) {
-                    showAlert(`Selected ${files.length} file${files.length !== 1 ? 's' : ''} for upload`, 'info');
-                }
-            });
-        }
-
-        // Call initialization when DOM is ready
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
-        });
-    </script>
-</body>
-</html>
+                this
