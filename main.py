@@ -12,6 +12,31 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 import time
+from api.auth import router as auth_router
+from api.clients import router as clients_router
+from api.chat import router as chat_router  # ← Add this line
+from api.documents import router as documents_router
+from api.emails import router as emails_router
+from api.demo import router as demo_router
+
+app = FastAPI()
+
+# CORS setup
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ✅ Mount all routes
+app.include_router(auth_router, prefix="/api/auth")
+app.include_router(clients_router, prefix="/api/clients")
+app.include_router(documents_router, prefix="/api/documents")
+app.include_router(emails_router, prefix="/api/emails")
+app.include_router(chat_router, prefix="/api/chat")      
+app.include_router(demo_router, prefix="/api/demo")
 
 # Import your existing services (with fallback for deployment)
 try:
@@ -473,6 +498,8 @@ async def upload_document(
             if extraction_result["success"]:
                 document.extracted_text = extraction_result["text"]
                 document.metadata = json.dumps(extraction_result["metadata"])
+                document.processing_status = "completed"
+                db.commit()
                 
                 # Add to client-specific vector store
                 chunk_ids = vector_service.add_document_to_vector_store(
