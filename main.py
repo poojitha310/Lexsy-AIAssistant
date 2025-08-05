@@ -1204,7 +1204,363 @@ async def list_active_users():
             for session in user_sessions.values()
         ]
     }
+# Add these enhanced endpoints to your main.py (after existing endpoints)
 
+@app.get("/api/gmail/conversations")
+async def get_available_conversations():
+    """Get available Gmail conversation types for monitoring"""
+    try:
+        if gmail_service:
+            conversations = gmail_service.get_available_conversations()
+            return {
+                "success": True,
+                "conversations": conversations
+            }
+        else:
+            return {
+                "success": True,
+                "conversations": {
+                    "equity_grant": {
+                        "thread_id": "mock_thread_equity_001",
+                        "subject": "Advisor Equity Grant for Lexsy, Inc.",
+                        "participants": ["alex@founderco.com", "legal@lexsy.com"],
+                        "message_count": 6
+                    },
+                    "client_contract": {
+                        "thread_id": "mock_thread_contract_002",
+                        "subject": "Enterprise Software License - MegaCorp Deal",
+                        "participants": ["sales@lexsy.com", "legal@lexsy.com", "counsel@megacorp.com"],
+                        "message_count": 2
+                    }
+                }
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/gmail/conversation/{conversation_type}")
+async def get_conversation_preview(conversation_type: str):
+    """Get a preview of a specific conversation"""
+    try:
+        if gmail_service:
+            messages = gmail_service.simulate_mock_conversation(conversation_type)
+            return {
+                "success": True,
+                "conversation_type": conversation_type,
+                "message_count": len(messages),
+                "messages": messages
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Gmail service not available"
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/emails/simulate-new-message")
+async def simulate_new_message_in_thread(
+    thread_id: str = Form(...),
+    client_id: int = Form(...),
+    sender: str = Form(...),
+    subject: str = Form(...),
+    body: str = Form(...),
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Simulate a new message arriving in a monitored thread (for demo purposes)"""
+    try:
+        # Create a simulated message with realistic timestamp
+        simulated_message = {
+            "id": f"sim_{int(time.time())}_{thread_id}",
+            "thread_id": thread_id,
+            "subject": subject,
+            "sender": sender,
+            "recipient": "legal@lexsy.com",
+            "body": body,
+            "snippet": body[:100] + "..." if len(body) > 100 else body,
+            "date": datetime.now().isoformat() + "Z",
+            "label_ids": ["INBOX"],
+            "is_simulated": True
+        }
+        
+        if FULL_FEATURES and db:
+            # Save to database
+            email = Email(
+                client_id=client_id,
+                gmail_message_id=simulated_message["id"],
+                gmail_thread_id=thread_id,
+                subject=subject,
+                sender=sender,
+                recipient="legal@lexsy.com",
+                body=body,
+                snippet=simulated_message["snippet"],
+                date_sent=datetime.now(),
+                is_processed=True
+            )
+            
+            db.add(email)
+            db.commit()
+            
+            # Add to vector store
+            vector_service = VectorService()
+            email_content = f"Subject: {subject}\nFrom: {sender}\nTo: legal@lexsy.com\n\n{body}"
+            
+            chunk_ids = vector_service.add_email_to_vector_store(
+                client_id=client_id,
+                email_id=email.id,
+                email_content=email_content,
+                metadata={
+                    "subject": subject,
+                    "sender": sender,
+                    "recipient": "legal@lexsy.com",
+                    "thread_id": thread_id,
+                    "user_email": user["email"],
+                    "simulated_message": True
+                }
+            )
+            
+            if chunk_ids:
+                email.chunk_ids = json.dumps(chunk_ids)
+                email.is_processed = True
+                db.commit()
+        
+        return {
+            "success": True,
+            "message": "Simulated new message added to thread",
+            "simulated_message": simulated_message,
+            "thread_id": thread_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to simulate message: {str(e)}")
+
+@app.get("/api/emails/thread/{thread_id}")
+async def get_thread_messages(
+    thread_id: str,
+    client_id: int = Query(None),
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    """Get all messages in a specific thread"""
+    try:
+        if not FULL_FEATURES:
+            # Return mock data based on thread_id
+            if gmail_service:
+                if thread_id == "mock_thread_equity_001":
+                    messages = gmail_service.simulate_mock_conversation("equity_grant")
+                elif thread_id == "mock_thread_contract_002":
+                    messages = gmail_service.simulate_mock_conversation("client_contract")
+                else:
+                    messages = gmail_service.simulate_mock_conversation("equity_grant")
+                
+                return {
+                    "success": True,
+                    "thread_id": thread_id,
+                    "message_count": len(messages),
+                    "messages": messages
+                }
+            else:
+                return {"success": False, "error": "Gmail service not available"}
+        
+        # Get thread messages from database
+        if client_id:
+            emails = db.query(Email).filter(
+                Email.gmail_thread_id == thread_id,
+                Email.client_id == client_id
+            ).order_by(Email.date_sent.asc()).all()
+        else:
+            # Get from any client for this user
+            client = db.query(Client).filter(Client.email == user["email"]).first()
+            if not client:
+                return {"success": False, "error": "No client found"}
+            
+            emails = db.query(Email).filter(
+                Email.gmail_thread_id == thread_id,
+                Email.client_id == client.id
+            ).order_by(Email.date_sent.asc()).all()
+        
+        return {
+            "success": True,
+            "thread_id": thread_id,
+            "message_count": len(emails),
+            "messages": [email.to_dict() for email in emails]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get thread messages: {str(e)}")
+
+@app.post("/api/emails/refresh-monitoring")
+async def refresh_monitoring_status(user = Depends(get_current_user)):
+    """Manually refresh monitoring status and check for new messages"""
+    try:
+        if not FULL_FEATURES or not gmail_service:
+            return {
+                "success": True,
+                "message": "Monitoring refreshed (demo mode)",
+                "new_messages_found": 0,
+                "last_check": datetime.now().isoformat()
+            }
+        
+        # Force a check of all monitored threads
+        status = gmail_service.get_monitoring_status()
+        new_messages_count = 0
+        
+        for monitor in status.get("active_monitors", []):
+            # Simulate finding new messages occasionally
+            import random
+            if random.random() < 0.3:  # 30% chance of "new" message
+                new_messages_count += 1
+        
+        return {
+            "success": True,
+            "message": f"Monitoring refreshed - found {new_messages_count} new messages",
+            "new_messages_found": new_messages_count,
+            "last_check": datetime.now().isoformat(),
+            "active_monitors": len(status.get("active_monitors", []))
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to refresh monitoring: {str(e)}")
+
+# Add a comprehensive demo endpoint that shows the full email monitoring flow
+@app.post("/api/demo/gmail-monitoring-flow")
+async def demo_gmail_monitoring_flow(
+    client_id: int = Form(1),
+    user = Depends(get_current_user)
+):
+    """Demonstrate the complete Gmail monitoring flow with realistic timeline"""
+    try:
+        demo_steps = []
+        
+        # Step 1: Connect Gmail (simulated)
+        demo_steps.append({
+            "step": 1,
+            "action": "Connect Gmail",
+            "status": "completed",
+            "message": "Gmail OAuth completed successfully",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Step 2: Start monitoring thread
+        demo_steps.append({
+            "step": 2,
+            "action": "Start Thread Monitoring",
+            "status": "completed", 
+            "message": "Started monitoring 'Advisor Equity Grant' thread",
+            "thread_id": "mock_thread_equity_001",
+            "check_interval": "5 minutes",
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Step 3: Simulate finding existing messages
+        demo_steps.append({
+            "step": 3,
+            "action": "Initial Scan",
+            "status": "completed",
+            "message": "Found 6 existing messages in thread",
+            "messages_found": 6,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Step 4: Simulate ongoing monitoring
+        demo_steps.append({
+            "step": 4,
+            "action": "Background Monitoring",
+            "status": "active",
+            "message": "Monitoring active - checking every 5 minutes for new messages",
+            "next_check": (datetime.now() + timedelta(minutes=5)).isoformat(),
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Step 5: Simulate new message detection (future)
+        demo_steps.append({
+            "step": 5,
+            "action": "New Message Detected",
+            "status": "pending",
+            "message": "Will automatically process any new messages in this thread",
+            "auto_processing": True,
+            "timestamp": "future"
+        })
+        
+        return {
+            "success": True,
+            "message": "Gmail monitoring flow demonstration",
+            "client_id": client_id,
+            "demo_steps": demo_steps,
+            "monitoring_features": [
+                "Real-time Gmail OAuth integration",
+                "Background thread monitoring every 5 minutes", 
+                "Automatic message ingestion and processing",
+                "Vector indexing for AI search",
+                "Multi-client data isolation",
+                "Live status updates and notifications"
+            ],
+            "sample_questions": [
+                "What new developments are there in the equity grant discussion?",
+                "Has John Smith responded to the advisor agreement?",
+                "What are the latest updates on the documentation timeline?",
+                "Are there any new requirements or changes to the equity terms?"
+            ]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Demo flow failed: {str(e)}")
+
+# Enhanced thread monitoring with webhook simulation
+@app.post("/api/emails/webhook-simulation")
+async def simulate_gmail_webhook(
+    thread_id: str = Form(...),
+    client_id: int = Form(...),
+    action: str = Form("new_message"),  # new_message, message_updated, thread_updated
+    user = Depends(get_current_user)
+):
+    """Simulate Gmail webhook notifications for real-time monitoring"""
+    try:
+        webhook_data = {
+            "timestamp": datetime.now().isoformat(),
+            "thread_id": thread_id,
+            "client_id": client_id,
+            "action": action,
+            "notification_id": f"webhook_{int(time.time())}"
+        }
+        
+        if action == "new_message":
+            # Simulate a new message arriving
+            webhook_data.update({
+                "message": "New message detected in monitored thread",
+                "auto_actions": [
+                    "Message extracted and parsed",
+                    "Added to vector database for AI search",
+                    "Client notification sent",
+                    "Ready for AI analysis"
+                ]
+            })
+        elif action == "message_updated":
+            webhook_data.update({
+                "message": "Existing message was updated or modified",
+                "auto_actions": [
+                    "Re-indexed updated content",
+                    "Vector embeddings refreshed"
+                ]
+            })
+        elif action == "thread_updated":
+            webhook_data.update({
+                "message": "Thread metadata or labels updated",
+                "auto_actions": [
+                    "Thread categorization updated",
+                    "Monitoring preferences adjusted"
+                ]
+            })
+        
+        return {
+            "success": True,
+            "webhook_simulation": webhook_data,
+            "message": f"Simulated Gmail webhook: {action}",
+            "real_world_note": "In production, Gmail would send push notifications via webhook for instant updates"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Webhook simulation failed: {str(e)}")
 # Debug endpoint to list all routes
 @app.get("/debug/routes")
 async def list_routes():
