@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Header, Depends, Request, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
@@ -8,8 +9,9 @@ import os
 import json
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+import time
 
 # Import your existing services (with fallback for deployment)
 try:
@@ -28,18 +30,6 @@ try:
 except ImportError as e:
     print(f"⚠️ Limited features mode: {e}")
     FULL_FEATURES = False
-    
-    # Fallback minimal setup
-    class Settings:
-        UPLOAD_DIR = "./uploads"
-        CHROMADB_PATH = "./chromadb"
-        MAX_FILE_SIZE = 10 * 1024 * 1024
-        GOOGLE_CLIENT_ID = None
-        GOOGLE_CLIENT_SECRET = None
-    settings = Settings()
-    
-    def get_db():
-        yield None
 
 # Create FastAPI app
 app = FastAPI(
@@ -73,11 +63,7 @@ class UserAuth(BaseModel):
     email: str
     org: str
 
-class MonitoringRequest(BaseModel):
-    label: str = "INBOX"
-    thread_id: Optional[str] = None
-
-# In-memory user sessions (in production, use Redis or database)
+# In-memory user sessions
 user_sessions = {}
 
 # Global Gmail service instance
@@ -129,7 +115,7 @@ async def startup_event():
 # Serve the main application
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Serve the real-time AI Assistant interface"""
+    """Serve the main application"""
     try:
         if os.path.exists("index.html"):
             with open("index.html", 'r', encoding='utf-8') as file:
@@ -189,14 +175,18 @@ async def api_status():
             "environment": "production" if not os.getenv("DEBUG") else "development"
         },
         "active_users": len(user_sessions),
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().iosformat()
     }
 
-# Client management endpoints
+# ======================
+# CLIENT MANAGEMENT ENDPOINTS
+# ======================
+
 @app.get("/api/clients")
 async def list_clients():
     """List all available clients"""
     if not FULL_FEATURES:
+        # Return demo clients with sample data indicators
         return {
             "success": True,
             "clients": [
@@ -205,14 +195,22 @@ async def list_clients():
                     "name": "Lexsy, Inc.",
                     "email": "legal@lexsy.com",
                     "company": "Lexsy, Inc.",
-                    "description": "AI-powered legal technology startup"
+                    "description": "AI-powered legal technology startup",
+                    "is_active": True,
+                    "created_at": datetime.now().isoformat(),
+                    "has_documents": True,
+                    "has_emails": True
                 },
                 {
                     "id": 2,
                     "name": "TechCorp LLC",
                     "email": "counsel@techcorp.com", 
                     "company": "TechCorp LLC",
-                    "description": "Enterprise software company"
+                    "description": "Enterprise software company",
+                    "is_active": True,
+                    "created_at": datetime.now().isoformat(),
+                    "has_documents": False,
+                    "has_emails": False
                 }
             ]
         }
@@ -220,11 +218,20 @@ async def list_clients():
     try:
         db = SessionLocal()
         clients = db.query(Client).filter(Client.is_active == True).all()
+        
+        client_list = []
+        for client in clients:
+            client_dict = client.to_dict()
+            # Add content indicators
+            client_dict["has_documents"] = len(client.documents) > 0
+            client_dict["has_emails"] = len(client.emails) > 0
+            client_list.append(client_dict)
+        
         db.close()
         
         return {
             "success": True,
-            "clients": [client.to_dict() for client in clients]
+            "clients": client_list
         }
     except Exception as e:
         return {
@@ -238,18 +245,20 @@ async def create_client(
     name: str = Form(...),
     email: str = Form(...),
     company: str = Form(...),
-    description: str = Form(...)
+    description: str = Form("")
 ):
     """Create a new client"""
     if not FULL_FEATURES:
         return {
             "success": True,
             "client": {
-                "id": 3,
+                "id": len(user_sessions) + 3,  # Fake incremental ID
                 "name": name,
                 "email": email,
                 "company": company,
-                "description": description
+                "description": description,
+                "is_active": True,
+                "created_at": datetime.now().isoformat()
             }
         }
     
@@ -272,44 +281,118 @@ async def create_client(
         db.add(client)
         db.commit()
         db.refresh(client)
+        
+        client_dict = client.to_dict()
+        client_dict["has_documents"] = False
+        client_dict["has_emails"] = False
+        
         db.close()
         
         return {
             "success": True,
-            "client": client.to_dict()
+            "client": client_dict
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
 @app.get("/api/clients/{client_id}")
 async def get_client(client_id: int):
-    """Get specific client details"""
+    """Get specific client details with stats"""
     if not FULL_FEATURES:
         demo_clients = {
-            1: {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com", "company": "Lexsy, Inc."},
-            2: {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com", "company": "TechCorp LLC"}
+            1: {
+                "id": 1, 
+                "name": "Lexsy, Inc.", 
+                "email": "legal@lexsy.com", 
+                "company": "Lexsy, Inc.",
+                "description": "AI-powered legal technology startup",
+                "is_active": True,
+                "created_at": datetime.now().isoformat(),
+                "stats": {
+                    "documents": 3,
+                    "emails": 6,
+                    "conversations": 0
+                }
+            },
+            2: {
+                "id": 2, 
+                "name": "TechCorp LLC", 
+                "email": "counsel@techcorp.com", 
+                "company": "TechCorp LLC",
+                "description": "Enterprise software company",
+                "is_active": True,
+                "created_at": datetime.now().isoformat(),
+                "stats": {
+                    "documents": 0,
+                    "emails": 0,
+                    "conversations": 0
+                }
+            }
         }
         return {"success": True, "client": demo_clients.get(client_id)}
     
     try:
         db = SessionLocal()
         client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
-        db.close()
         
         if not client:
+            db.close()
             return {"success": False, "error": "Client not found"}
         
-        return {"success": True, "client": client.to_dict()}
+        client_dict = client.to_dict()
+        client_dict["stats"] = {
+            "documents": len(client.documents),
+            "emails": len(client.emails),
+            "conversations": len(client.conversations)
+        }
+        
+        db.close()
+        
+        return {"success": True, "client": client_dict}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# Document upload endpoint
-@app.post("/api/documents/upload")
+@app.delete("/api/clients/{client_id}")
+async def delete_client(client_id: int):
+    """Soft delete a client"""
+    if not FULL_FEATURES:
+        return {"success": True, "message": f"Client {client_id} deleted (demo mode)"}
+    
+    try:
+        db = SessionLocal()
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        
+        if not client:
+            db.close()
+            return {"success": False, "error": "Client not found"}
+        
+        # Soft delete
+        client.is_active = False
+        db.commit()
+        
+        # Clean up vector store data
+        try:
+            vector_service = VectorService()
+            vector_service.reset_client_data(client_id)
+        except:
+            pass
+        
+        db.close()
+        
+        return {"success": True, "message": "Client deleted successfully"}
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ======================
+# DOCUMENT ENDPOINTS
+# ======================
+
+@app.post("/api/documents/{client_id}/upload")
 async def upload_document(
+    client_id: int,
     file: UploadFile = File(...),
-    client_id: int = Form(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
+    user = Depends(get_current_user)
 ):
     """Upload and process a document for specific client"""
     try:
@@ -331,35 +414,24 @@ async def upload_document(
             # Demo mode response
             return {
                 "success": True,
-                "message": f"File uploaded successfully for client {client_id} (demo mode)",
+                "message": f"File uploaded successfully for client {client_id}",
                 "document": {
                     "id": str(uuid.uuid4()),
                     "filename": file.filename,
                     "client_id": client_id,
-                    "processing_status": "completed"
+                    "processing_status": "completed",
+                    "file_type": file.content_type.split('/')[-1],
+                    "file_size": len(file_content),
+                    "created_at": datetime.now().isoformat()
                 }
             }
         
-        # Use client_id if provided, otherwise get from user
-        if client_id:
-            target_client_id = client_id
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                raise HTTPException(status_code=404, detail="Client not found")
-        else:
-            # Get or create client for this user
-            client = db.query(Client).filter(Client.email == user["email"]).first()
-            if not client:
-                client = Client(
-                    name=user["name"],
-                    email=user["email"],
-                    company=user.get("org", "Individual"),
-                    description=f"Individual user: {user['name']}"
-                )
-                db.add(client)
-                db.commit()
-                db.refresh(client)
-            target_client_id = client.id
+        # Verify client exists
+        db = SessionLocal()
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            raise HTTPException(status_code=404, detail="Client not found")
         
         # Initialize services
         doc_service = DocumentService()
@@ -373,11 +445,12 @@ async def upload_document(
         )
         
         if not save_result["success"]:
+            db.close()
             raise HTTPException(status_code=400, detail=save_result["error"])
         
         # Create document record
         document = Document(
-            client_id=target_client_id,
+            client_id=client_id,
             filename=save_result["filename"],
             original_filename=save_result["original_filename"],
             file_type=save_result["file_type"],
@@ -399,10 +472,11 @@ async def upload_document(
             
             if extraction_result["success"]:
                 document.extracted_text = extraction_result["text"]
+                document.metadata = json.dumps(extraction_result["metadata"])
                 
-                # Add to vector store with user context
+                # Add to client-specific vector store
                 chunk_ids = vector_service.add_document_to_vector_store(
-                    client_id=target_client_id,
+                    client_id=client_id,
                     document_id=document.id,
                     text=extraction_result["text"],
                     metadata={
@@ -428,10 +502,13 @@ async def upload_document(
             db.commit()
             print(f"Processing error: {e}")
         
+        result_dict = document.to_dict()
+        db.close()
+        
         return {
             "success": True,
             "message": "Document uploaded and processed successfully",
-            "document": document.to_dict()
+            "document": result_dict
         }
         
     except HTTPException:
@@ -439,183 +516,375 @@ async def upload_document(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
-# Get user's documents
-@app.get("/api/documents/list")
-async def list_documents(
-    client_id: int = Query(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
+@app.get("/api/documents/{client_id}/documents")
+async def get_client_documents(
+    client_id: int,
+    skip: int = 0,
+    limit: int = 50
 ):
     """Get documents for specific client"""
     try:
         if not FULL_FEATURES:
-            if client_id == 1:
+            if client_id == 1:  # Lexsy sample documents
                 return {
+                    "client_id": client_id,
+                    "client_name": "Lexsy, Inc.",
+                    "total_documents": 3,
                     "documents": [
-                        {"id": 1, "filename": "lexsy-board-approval.pdf", "original_filename": "Lexsy Board Approval.pdf", "client_id": 1, "processing_status": "completed", "file_type": "pdf", "file_size": 245760},
-                        {"id": 2, "filename": "lexsy-advisor-agreement.docx", "original_filename": "Lexsy Advisor Agreement.docx", "client_id": 1, "processing_status": "completed", "file_type": "docx", "file_size": 87320},
-                        {"id": 3, "filename": "lexsy-equity-plan.pdf", "original_filename": "Lexsy Equity Plan.pdf", "client_id": 1, "processing_status": "completed", "file_type": "pdf", "file_size": 156890}
+                        {
+                            "id": 1, 
+                            "filename": "lexsy-board-approval.pdf", 
+                            "original_filename": "Lexsy Board Approval - Equity Incentive Plan.pdf", 
+                            "client_id": 1, 
+                            "processing_status": "completed", 
+                            "file_type": "pdf", 
+                            "file_size": 245760,
+                            "created_at": datetime.now().isoformat()
+                        },
+                        {
+                            "id": 2, 
+                            "filename": "lexsy-advisor-agreement.docx", 
+                            "original_filename": "Lexsy Advisor Agreement Template.docx", 
+                            "client_id": 1, 
+                            "processing_status": "completed", 
+                            "file_type": "docx", 
+                            "file_size": 87320,
+                            "created_at": datetime.now().isoformat()
+                        },
+                        {
+                            "id": 3, 
+                            "filename": "lexsy-equity-plan.pdf", 
+                            "original_filename": "Lexsy Equity Incentive Plan (EIP).pdf", 
+                            "client_id": 1, 
+                            "processing_status": "completed", 
+                            "file_type": "pdf", 
+                            "file_size": 156890,
+                            "created_at": datetime.now().isoformat()
+                        }
                     ]
                 }
             else:
-                return {"documents": []}
+                return {
+                    "client_id": client_id,
+                    "client_name": f"Client {client_id}",
+                    "total_documents": 0,
+                    "documents": []
+                }
         
-        if client_id:
-            # Get documents for specific client
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                return {"documents": []}
-            documents = db.query(Document).filter(Document.client_id == client_id).all()
-        else:
-            # Get documents for current user's client
-            client = db.query(Client).filter(Client.email == user["email"]).first()
-            if not client:
-                return {"documents": []}
-            documents = db.query(Document).filter(Document.client_id == client.id).all()
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            return {"client_id": client_id, "total_threads": 0, "threads": [], "error": "Client not found"}
+        
+        # Get unique threads with aggregated data
+        from sqlalchemy import func
+        threads = db.query(
+            Email.gmail_thread_id,
+            func.count(Email.id).label('message_count'),
+            func.max(Email.date_sent).label('latest_date'),
+            func.max(Email.subject).label('subject')  # Get one subject per thread
+        ).filter(
+            Email.client_id == client_id
+        ).group_by(Email.gmail_thread_id).all()
+        
+        thread_list = []
+        for thread in threads:
+            # Get first email in thread for more details
+            first_email = db.query(Email).filter(
+                Email.client_id == client_id,
+                Email.gmail_thread_id == thread.gmail_thread_id
+            ).order_by(Email.date_sent.asc()).first()
+            
+            thread_list.append({
+                "thread_id": thread.gmail_thread_id,
+                "message_count": thread.message_count,
+                "latest_date": thread.latest_date.isoformat() if thread.latest_date else None,
+                "subject": thread.subject or (first_email.subject if first_email else "Unknown"),
+                "participants": f"{first_email.sender} ↔ {first_email.recipient}" if first_email else "Unknown",
+                "snippet": first_email.snippet if first_email else ""
+            })
+        
+        db.close()
         
         return {
-            "documents": [doc.to_dict() for doc in documents],
-            "total": len(documents)
+            "client_id": client_id,
+            "total_threads": len(thread_list),
+            "threads": thread_list
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Get user's emails
-@app.get("/api/emails/list")
-async def list_emails(
-    client_id: int = Query(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
-):
-    """Get emails for specific client"""
-    try:
-        if not FULL_FEATURES:
-            if client_id == 1:
-                # Return Lexsy sample emails using Gmail service
-                if gmail_service:
-                    sample_emails = gmail_service.simulate_mock_conversation("equity_grant")
-                else:
-                    sample_emails = []
-                return {"emails": sample_emails}
-            else:
-                return {"emails": []}
-        
-        if client_id:
-            # Get emails for specific client
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                return {"emails": []}
-            emails = db.query(Email).filter(Email.client_id == client_id).all()
-        else:
-            # Get emails for current user's client
-            client = db.query(Client).filter(Client.email == user["email"]).first()
-            if not client:
-                return {"emails": []}
-            emails = db.query(Email).filter(Email.client_id == client.id).all()
-        
         return {
-            "emails": [email.to_dict() for email in emails],
-            "total": len(emails)
+            "client_id": client_id,
+            "total_threads": 0,
+            "threads": [],
+            "error": str(e)
         }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-# AI Chat endpoint
-@app.post("/api/chat/ask", response_model=ChatResponse)
+# ======================
+# CHAT ENDPOINTS
+# ======================
+
+@app.post("/api/chat/{client_id}/ask")
 async def ask_question(
-    request: ChatRequest,
-    client_id: int = Form(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
+    client_id: int,
+    question: str = Form(...),
+    include_history: bool = Form(True),
+    user = Depends(get_current_user)
 ):
-    """Ask a question against user's documents and emails"""
+    """Ask a question about client's documents and emails"""
     try:
         if not FULL_FEATURES:
-            # Demo responses based on client
-            question_lower = request.question.lower()
+            # Demo responses based on client and question
+            question_lower = question.lower()
             
             if client_id == 1:  # Lexsy responses
                 if "john smith" in question_lower or "equity" in question_lower:
-                    answer = "Based on the email thread, Alex proposed a 15,000 RSA equity grant for John Smith as Strategic Advisor with 2-year monthly vesting and no cliff. The legal team confirmed they can prepare the necessary documentation including Board Consent, Advisor Agreement, and Stock Purchase Agreement."
+                    answer = "Based on the email thread between Alex Rodriguez (CEO) and Kristina Chen (Legal Counsel), Alex proposed a **15,000 RSA equity grant** for John Smith as Strategic Advisor. John Smith is a former VP of AI at Google and current partner at Andreessen Horowitz. The grant includes:\n\n• **15,000 Restricted Stock Awards (RSAs)**\n• **2-year monthly vesting** with no cliff\n• **Board observer rights** for quarterly meetings\n• **Expected commitment**: 4-6 hours per month\n\nThe legal team confirmed this grant is **well within the available share pool** (915,000 shares available out of 1M total EIP)."
+                    
                 elif "vesting" in question_lower:
-                    answer = "The vesting terms discussed are 2-year monthly vesting with no cliff, effective from July 22, 2025. This means 625 shares vest each month (15,000 ÷ 24 months). The legal team confirmed this is standard for advisor agreements."
-                elif "tax" in question_lower:
-                    answer = "Kristina explained that with RSAs, John pays tax on fair market value when vesting occurs, while stock options are only taxed when exercised. For an early-stage company like Lexsy, RSAs might be better due to lower current valuation (~$0.50/share). She also recommended filing an 83(b) election."
+                    answer = "The **vesting terms** discussed in the email thread are:\n\n• **Duration**: 2-year monthly vesting\n• **Schedule**: 625 shares vest each month (15,000 ÷ 24 months)\n• **Cliff**: No cliff period\n• **Start date**: July 22, 2025 (retroactive to verbal agreement)\n• **Acceleration**: Single trigger acceleration for 25% of unvested shares if terminated without cause\n\nKristina (Legal) confirmed this is **standard for advisor agreements** and recommended including an 83(b) election to minimize tax impact."
+                    
+                elif "tax" in question_lower or "83(b)" in question_lower:
+                    answer = "**Tax implications** explained by Legal Counsel:\n\n**RSAs vs Stock Options for John:**\n• **RSAs**: Taxed on fair market value when vesting (ordinary income rates)\n• **Current tax impact**: ~$7,500 ordinary income spread over 24 months\n• **Recommendation**: RSAs are better given early stage and low current FMV (~$0.50/share)\n\n**83(b) Election Benefits:**\n• Pay tax on current FMV now ($300 total)\n• All future appreciation taxed as capital gains\n• **Must file within 30 days** of grant\n• Minimal upfront tax burden at current valuation"
+                    
                 elif "documentation" in question_lower or "paperwork" in question_lower:
-                    answer = "The legal team needs to prepare: 1) Board Consent authorizing the grant, 2) Advisor Agreement (including board observer rights), 3) Stock Purchase Agreement, and 4) 83(b) election form. Timeline is ready by Friday July 25th, with Board Consent prioritized first for Thursday's board meeting."
-                elif "shares" in question_lower and "available" in question_lower:
-                    answer = "According to the legal team's analysis, Lexsy has 1,000,000 total shares in the EIP pool with 85,000 previously granted, leaving 915,000 shares available. The requested 15,000 shares for John Smith is well within the available pool."
+                    answer = "**Required documentation** as outlined by Legal:\n\n**Primary Documents:**\n1. **Board Consent** - Authorization for the equity grant\n2. **Advisor Agreement** - Including IP assignment, confidentiality, board observer rights\n3. **Restricted Stock Award Agreement** - Formal grant terms\n4. **83(b) Election Form** - Tax optimization\n\n**Timeline:**\n• Board Consent ready for Thursday's meeting\n• All agreements drafted by Wednesday\n• Full execution package ready Friday\n• **Target completion**: Tuesday, July 29th\n\n**Special provisions**: A16z portfolio introduction rights with conflict disclosures"
+                    
+                elif "shares" in question_lower and ("available" in question_lower or "pool" in question_lower):
+                    answer = "**Share availability confirmed** by Legal team:\n\n**Current EIP Status:**\n• **Total EIP pool**: 1,000,000 shares\n• **Previously granted**: 85,000 shares  \n• **Available for grant**: 915,000 shares\n• **Requested for John Smith**: 15,000 shares\n• **Status**: ✅ **APPROVED** - Well within available pool\n\n**Grant represents**: 1.5% of total company\n**Remaining after grant**: 900,000 shares available for future grants"
+                    
+                elif "board" in question_lower:
+                    answer = "**Board approval process** from the email thread:\n\n**Board Meeting Details:**\n• **Date**: Thursday (July 25th)\n• **Agenda item**: \"Advisor Equity Grant Authorization\"\n• **Attendees**: All directors confirmed\n• **Priority**: This will be prioritized agenda item\n\n**Board Observer Rights for John:**\n• **Quarterly board meetings** access\n• **Formal observer rights** included in Advisor Agreement\n• **A16z portfolio introduction** rights with conflict disclosures\n\n**Current Status**: Board Consent prepared and ready for Thursday's meeting approval"
+                
                 else:
-                    answer = "I can help analyze Lexsy's legal documents and email discussions about advisor equity grants. Ask me about John Smith's grant, vesting terms, tax implications, required documentation, or share availability."
-            else:  # TechCorp or other clients
-                answer = "I don't see any documents or emails for this client yet. Please upload documents or connect Gmail to start analysis, or try switching to the Lexsy client which has sample data loaded."
+                    answer = "I can help analyze **Lexsy's legal documents and email discussions**. I have access to:\n\n📄 **Legal Documents:**\n• Board Approval for Equity Incentive Plan\n• Advisor Agreement Template  \n• Complete Equity Incentive Plan (EIP)\n\n📧 **Email Thread:**\n• 6-message conversation about John Smith's advisor equity grant\n• Discussion between Alex Rodriguez (CEO) and Kristina Chen (Legal)\n\n**Try asking about:**\n• John Smith's equity grant details\n• Vesting terms and tax implications\n• Required documentation and timeline\n• Share availability in the EIP\n• Board approval process"
+            else:
+                answer = f"I don't see any documents or emails for **Client {client_id}** yet. To analyze legal matters, please:\n\n1. **Upload documents** (PDF, DOCX, TXT)\n2. **Connect Gmail** and ingest email threads\n3. Or **switch to Lexsy, Inc.** which has sample legal data loaded\n\nOnce you have content uploaded, I can help analyze contracts, agreements, compliance requirements, and email discussions."
             
-            return ChatResponse(
-                success=True,
-                answer=answer,
-                sources=[{"type": "demo", "content": "Sample response"}],
-                response_time=0.5
-            )
+            # Mock sources for Lexsy
+            sources = []
+            if client_id == 1:
+                if "john smith" in question_lower or "equity" in question_lower or "vesting" in question_lower:
+                    sources = [
+                        {"type": "email", "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com", "similarity_score": 0.95},
+                        {"type": "email", "subject": "Re: Advisor Equity Grant - Legal Review", "sender": "legal@lexsy.com", "similarity_score": 0.92},
+                        {"type": "document", "filename": "Lexsy Equity Incentive Plan.pdf", "similarity_score": 0.88}
+                    ]
+            
+            return {
+                "success": True,
+                "question": question,
+                "answer": answer,
+                "sources": sources,
+                "context_used": len(sources),
+                "tokens_used": len(answer.split()) * 1.3,  # Rough estimate
+                "response_time": 0.8,
+                "conversation_id": int(time.time())
+            }
         
-        # Use client_id if provided, otherwise get from user
-        if client_id:
-            target_client_id = client_id
-        else:
-            client = db.query(Client).filter(Client.email == user["email"]).first()
-            if not client:
-                client = Client(
-                    name=user["name"],
-                    email=user["email"],
-                    company=request.user_context.get("org", "Individual"),
-                    description=f"Individual user: {user['name']}"
-                )
-                db.add(client)
-                db.commit()
-                db.refresh(client)
-            target_client_id = client.id
+        # Full features mode
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            raise HTTPException(status_code=404, detail="Client not found")
         
         # Initialize AI service
         ai_service = AIService()
         
-        # Generate AI response using user's specific context
+        # Get conversation history if requested
+        conversation_history = None
+        if include_history:
+            recent_conversations = db.query(Conversation).filter(
+                Conversation.client_id == client_id
+            ).order_by(Conversation.created_at.desc()).limit(6).all()
+            
+            conversation_history = [
+                {
+                    "question": conv.question,
+                    "answer": conv.answer
+                }
+                for conv in reversed(recent_conversations)
+            ]
+        
+        # Generate AI response with client-specific context
         response = ai_service.generate_response(
-            client_id=target_client_id,
-            question=request.question,
-            conversation_history=None
+            client_id=client_id,
+            question=question,
+            conversation_history=conversation_history
         )
         
-        if response["success"]:
-            # Save conversation
-            conversation = Conversation(
-                client_id=target_client_id,
-                question=request.question,
-                answer=response["answer"],
-                response_time=response["response_time"],
-                tokens_used=response.get("tokens_used", 0)
-            )
-            db.add(conversation)
-            db.commit()
-            
-            return ChatResponse(
-                success=True,
-                answer=response["answer"],
-                sources=response.get("sources", []),
-                response_time=response["response_time"]
-            )
-        else:
-            raise HTTPException(status_code=500, detail="AI processing failed")
-            
+        if not response["success"]:
+            db.close()
+            raise HTTPException(status_code=500, detail=response.get("error", "AI response generation failed"))
+        
+        # Save conversation to database
+        conversation = Conversation(
+            client_id=client_id,
+            question=question,
+            answer=response["answer"],
+            context_sources=json.dumps([src["type"] + ":" + str(src.get("document_id", src.get("email_id", ""))) for src in response["sources"]]),
+            similarity_scores=json.dumps([src["similarity_score"] for src in response["sources"]]),
+            response_time=response["response_time"],
+            tokens_used=response["tokens_used"]
+        )
+        
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "question": question,
+            "answer": response["answer"],
+            "sources": response["sources"],
+            "context_used": response["context_used"],
+            "tokens_used": response["tokens_used"],
+            "response_time": response["response_time"],
+            "conversation_id": conversation.id
+        }
+        
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
 
-# Gmail OAuth endpoints
+@app.post("/api/chat/{client_id}/search")
+async def search_content(
+    client_id: int,
+    query: str = Form(...),
+    source_filter: Optional[str] = Form(None),
+    n_results: int = Form(5)
+):
+    """Search through client's documents and emails"""
+    try:
+        if not FULL_FEATURES:
+            # Demo search results for Lexsy
+            if client_id == 1:
+                demo_results = [
+                    {
+                        "content": "We'd like to bring on a new advisor for Lexsy, Inc. Name: John Smith, Role: Strategic Advisor, Proposed grant: 15,000 RSAs",
+                        "metadata": {"source_type": "email", "subject": "Advisor Equity Grant", "sender": "alex@founderco.com"},
+                        "similarity_score": 0.95
+                    },
+                    {
+                        "content": "The Company's 2025 Equity Incentive Plan reserves 1,000,000 shares of Common Stock for issuance.",
+                        "metadata": {"source_type": "document", "filename": "Lexsy Equity Incentive Plan.pdf"},
+                        "similarity_score": 0.87
+                    }
+                ]
+                
+                # Filter by source type if specified
+                if source_filter:
+                    demo_results = [r for r in demo_results if r["metadata"]["source_type"] == source_filter]
+                
+                return {
+                    "success": True,
+                    "query": query,
+                    "source_filter": source_filter,
+                    "results_count": len(demo_results),
+                    "results": demo_results
+                }
+            else:
+                return {
+                    "success": True,
+                    "query": query,
+                    "source_filter": source_filter,
+                    "results_count": 0,
+                    "results": []
+                }
+        
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Initialize vector service
+        vector_service = VectorService()
+        
+        # Search for similar content in client-specific store
+        results = vector_service.search_similar_content(
+            client_id=client_id,
+            query=query,
+            n_results=n_results,
+            source_filter=source_filter
+        )
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "query": query,
+            "source_filter": source_filter,
+            "results_count": len(results),
+            "results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@app.get("/api/chat/{client_id}/conversations")
+async def get_conversations(
+    client_id: int,
+    skip: int = 0,
+    limit: int = 50
+):
+    """Get conversation history for a client"""
+    try:
+        if not FULL_FEATURES:
+            return {
+                "client_id": client_id,
+                "client_name": f"Client {client_id}",
+                "total_conversations": 0,
+                "conversations": []
+            }
+        
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        conversations = db.query(Conversation).filter(
+            Conversation.client_id == client_id
+        ).order_by(Conversation.created_at.desc()).offset(skip).limit(limit).all()
+        
+        result = {
+            "client_id": client_id,
+            "client_name": client.name,
+            "total_conversations": len(conversations),
+            "conversations": [conv.to_dict() for conv in conversations]
+        }
+        
+        db.close()
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch conversations: {str(e)}")
+
+# ======================
+# GMAIL AUTHENTICATION ENDPOINTS
+# ======================
+
 @app.get("/api/auth/gmail/auth-url")
-async def get_gmail_auth_url(user = Depends(get_current_user)):
-    """Get Gmail OAuth URL for user"""
+async def get_gmail_auth_url():
+    """Get Gmail OAuth URL"""
     try:
         # Check if we have Google OAuth credentials configured
         if not settings.GOOGLE_CLIENT_ID or not settings.GOOGLE_CLIENT_SECRET:
@@ -657,9 +926,11 @@ async def gmail_callback(code: str = Query(None), error: str = Query(None)):
         if error:
             return HTMLResponse(content=f"""
             <html>
-            <body>
-                <h2>❌ Gmail Authentication Error</h2>
+            <head><title>Gmail Authentication Error</title></head>
+            <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+                <h2 style="color: #dc3545;">❌ Gmail Authentication Error</h2>
                 <p>Error: {error}</p>
+                <p>You can close this window and try again.</p>
                 <script>
                     setTimeout(() => {{
                         window.close();
@@ -669,20 +940,22 @@ async def gmail_callback(code: str = Query(None), error: str = Query(None)):
             </html>
             """)
         
-        # Demo mode for immediate success
+        # For demo mode, always return success
         return HTMLResponse(content="""
         <html>
-        <body>
-            <h2>✅ Gmail Connected Successfully!</h2>
-            <p>OAuth authentication completed (demo mode)</p>
-            <p>Mock conversations are now available for analysis.</p>
-            <p>You can close this window and return to the app.</p>
+        <head><title>Gmail Connected Successfully</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+            <h2 style="color: #28a745;">✅ Gmail Connected Successfully!</h2>
+            <p>OAuth authentication completed successfully.</p>
+            <p><strong>Demo Mode:</strong> Mock email conversations are now available for analysis.</p>
+            <p style="color: #6c757d;">You can close this window and return to the app.</p>
             <script>
                 // Notify parent window of success
                 if (window.opener) {
                     window.opener.postMessage({
                         type: 'GMAIL_AUTH_SUCCESS',
-                        email: 'demo@gmail.com'
+                        email: 'demo@gmail.com',
+                        demo_mode: true
                     }, '*');
                 }
                 
@@ -697,9 +970,11 @@ async def gmail_callback(code: str = Query(None), error: str = Query(None)):
     except Exception as e:
         return HTMLResponse(content=f"""
         <html>
-        <body>
-            <h2>❌ Authentication Error</h2>
+        <head><title>Authentication Error</title></head>
+        <body style="font-family: Arial, sans-serif; padding: 40px; text-align: center;">
+            <h2 style="color: #dc3545;">❌ Authentication Error</h2>
             <p>Error: {str(e)}</p>
+            <p>You can close this window and try again.</p>
             <script>
                 setTimeout(() => {{
                     window.close();
@@ -709,257 +984,13 @@ async def gmail_callback(code: str = Query(None), error: str = Query(None)):
         </html>
         """)
 
-# Gmail monitoring endpoints
-@app.post("/api/emails/start-thread-monitoring")
-async def start_thread_monitoring(
-    thread_id: str = Form("mock_thread_equity_001"),
-    client_id: int = Form(None),
-    check_interval: int = Form(300),
-    user = Depends(get_current_user)
-):
-    """Start monitoring a specific Gmail thread"""
-    try:
-        if not FULL_FEATURES or not gmail_service:
-            return {
-                "success": True,
-                "message": f"Started monitoring thread {thread_id} (demo mode)",
-                "monitoring": {
-                    "thread_id": thread_id,
-                    "client_id": client_id or 1,
-                    "check_interval": check_interval,
-                    "status": "active",
-                    "demo_mode": True
-                }
-            }
-        
-        # Use provided client_id or default to 1
-        if not client_id:
-            client_id = 1
-        
-        result = gmail_service.start_thread_monitoring(thread_id, client_id, check_interval)
-        
-        if result["success"]:
-            result["monitoring"] = {
-                "thread_id": thread_id,
-                "client_id": client_id,
-                "check_interval": check_interval,
-                "status": "active",
-                "started_at": datetime.now().isoformat()
-            }
-        
-        return result
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to start monitoring: {str(e)}")
+# ======================
+# DEMO AND INITIALIZATION ENDPOINTS  
+# ======================
 
-@app.get("/api/emails/monitoring-status")
-async def get_monitoring_status(user = Depends(get_current_user)):
-    """Get Gmail monitoring status"""
-    try:
-        if not FULL_FEATURES or not gmail_service:
-            return {
-                "total_monitors": 1,
-                "active_monitors": [
-                    {
-                        "thread_id": "mock_thread_equity_001",
-                        "client_id": 1,
-                        "started_at": datetime.now().isoformat(),
-                        "last_check": datetime.now().isoformat(),
-                        "messages_found": 6,
-                        "demo_mode": True
-                    }
-                ]
-            }
-        
-        status = gmail_service.get_monitoring_status()
-        return status
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get monitoring status: {str(e)}")
-
-# Demo data loading
-@app.post("/api/demo/load-sample")
-async def load_sample_data(
-    client_id: int = Form(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
-):
-    """Load sample legal documents and emails for demo"""
-    try:
-        # Default to client_id 1 if not provided
-        if not client_id:
-            client_id = 1
-            
-        if not FULL_FEATURES:
-            return {
-                "success": True,
-                "message": "Sample data loaded (demo mode)",
-                "client_id": client_id,
-                "client_name": "Lexsy, Inc.",
-                "documents_loaded": 3,
-                "emails_loaded": 6,
-                "monitoring_started": True
-            }
-        
-        # Get or create client
-        client = db.query(Client).filter(Client.id == client_id).first()
-        if not client:
-            # Create Lexsy client
-            client = Client(
-                name="Lexsy, Inc.",
-                email="legal@lexsy.com",
-                company="Lexsy, Inc.",
-                description="AI-powered legal technology startup"
-            )
-            db.add(client)
-            db.commit()
-            db.refresh(client)
-            client_id = client.id
-        
-        # Initialize services
-        doc_service = DocumentService()
-        vector_service = VectorService()
-        
-        documents_loaded = 0
-        emails_loaded = 0
-        
-        # Load sample documents
-        try:
-            sample_docs = doc_service.get_sample_documents()
-            
-            for sample_doc in sample_docs:
-                # Check if already exists
-                existing = db.query(Document).filter(
-                    Document.client_id == client_id,
-                    Document.original_filename == sample_doc["original_filename"]
-                ).first()
-                
-                if existing:
-                    continue
-                
-                # Create document
-                document = Document(
-                    client_id=client_id,
-                    filename=sample_doc["filename"],
-                    original_filename=sample_doc["original_filename"],
-                    file_type=sample_doc["file_type"],
-                    file_size=len(sample_doc["content"]),
-                    extracted_text=sample_doc["content"],
-                    processing_status="completed"
-                )
-                
-                db.add(document)
-                db.commit()
-                db.refresh(document)
-                
-                # Add to vector store
-                chunk_ids = vector_service.add_document_to_vector_store(
-                    client_id=client_id,
-                    document_id=document.id,
-                    text=sample_doc["content"],
-                    metadata={
-                        "filename": document.original_filename,
-                        "file_type": document.file_type,
-                        "user_email": user["email"],
-                        "sample_document": True
-                    }
-                )
-                
-                if chunk_ids:
-                    document.chunk_ids = json.dumps(chunk_ids)
-                    db.commit()
-                
-                documents_loaded += 1
-        
-        except Exception as e:
-            print(f"Error loading sample documents: {e}")
-        
-        # Load sample emails
-        try:
-            if gmail_service:
-                sample_emails = gmail_service.simulate_mock_conversation("equity_grant")
-                
-                for email_data in sample_emails:
-                    # Check if already exists
-                    existing = db.query(Email).filter(
-                        Email.gmail_message_id == email_data["id"],
-                        Email.client_id == client_id
-                    ).first()
-                    
-                    if existing:
-                        continue
-                    
-                    # Create email
-                    email = Email(
-                        client_id=client_id,
-                        gmail_message_id=email_data["id"],
-                        gmail_thread_id=email_data["thread_id"],
-                        subject=email_data["subject"],
-                        sender=email_data["sender"],
-                        recipient=email_data["recipient"],
-                        body=email_data["body"],
-                        snippet=email_data["snippet"],
-                        date_sent=datetime.fromisoformat(email_data["date"].replace("Z", "+00:00")) if email_data.get("date") else None,
-                        is_processed=False
-                    )
-                    
-                    db.add(email)
-                    db.commit()
-                    db.refresh(email)
-                    
-                    # Add to vector store
-                    email_content = f"Subject: {email_data['subject']}\nFrom: {email_data['sender']}\nTo: {email_data['recipient']}\n\n{email_data['body']}"
-                    
-                    chunk_ids = vector_service.add_email_to_vector_store(
-                        client_id=client_id,
-                        email_id=email.id,
-                        email_content=email_content,
-                        metadata={
-                            "subject": email_data["subject"],
-                            "sender": email_data["sender"],
-                            "recipient": email_data["recipient"],
-                            "thread_id": email_data["thread_id"],
-                            "user_email": user["email"],
-                            "sample_email": True
-                        }
-                    )
-                    
-                    if chunk_ids:
-                        email.chunk_ids = json.dumps(chunk_ids)
-                        email.is_processed = True
-                        db.commit()
-                    
-                    emails_loaded += 1
-                    
-        except Exception as e:
-            print(f"Error loading sample emails: {e}")
-        
-        # Start monitoring the sample thread
-        monitoring_started = False
-        try:
-            if gmail_service:
-                result = gmail_service.start_thread_monitoring("mock_thread_equity_001", client_id, 300)
-                monitoring_started = result.get("success", False)
-        except:
-            pass
-        
-        return {
-            "success": True,
-            "message": f"Sample data loaded successfully for client {client.name}",
-            "client_id": client_id,
-            "client_name": client.name,
-            "documents_loaded": documents_loaded,
-            "emails_loaded": emails_loaded,
-            "monitoring_started": monitoring_started
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load sample data: {str(e)}")
-
-# Initialize demo with multiple clients
 @app.post("/api/demo/initialize-full")
 async def initialize_full_demo():
-    """Initialize complete demo with multiple clients"""
+    """Initialize complete demo with sample clients and data"""
     try:
         results = {
             "clients_created": [],
@@ -1002,14 +1033,17 @@ async def initialize_full_demo():
             if results["clients_created"]:
                 lexsy_client = results["clients_created"][0]
                 try:
-                    # Create fake user for loading sample data
-                    fake_user = {"email": "demo@lexsy.com", "name": "Demo User"}
-                    sample_result = await load_sample_data(
-                        client_id=lexsy_client["id"],
-                        user=fake_user,
-                        db=SessionLocal()
-                    )
-                    results["sample_data_loaded"] = sample_result
+                    # Load sample documents
+                    doc_result = await upload_sample_documents(lexsy_client["id"])
+                    # Load sample emails  
+                    email_result = await ingest_sample_emails(lexsy_client["id"])
+                    
+                    results["sample_data_loaded"] = {
+                        "documents": doc_result.get("success", False),
+                        "emails": email_result.get("success", False),
+                        "documents_count": len(doc_result.get("documents", [])),
+                        "emails_count": email_result.get("emails_processed", 0)
+                    }
                 except Exception as e:
                     print(f"Error loading sample data: {e}")
         else:
@@ -1019,9 +1053,10 @@ async def initialize_full_demo():
                 {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
             ]
             results["sample_data_loaded"] = {
-                "documents_loaded": 3,
-                "emails_loaded": 6,
-                "monitoring_started": True
+                "documents": True,
+                "emails": True,
+                "documents_count": 3,
+                "emails_count": 6
             }
         
         return {
@@ -1037,548 +1072,76 @@ async def initialize_full_demo():
             "message": "Demo initialization failed"
         }
 
-# Clear user data
-@app.post("/api/user/clear-data")
-async def clear_user_data(
-    client_id: int = Form(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
+# ======================
+# GMAIL MONITORING ENDPOINTS
+# ======================
+
+@app.post("/api/emails/{client_id}/start-thread-monitoring")
+async def start_thread_monitoring(
+    client_id: int,
+    thread_id: str = Form("mock_thread_equity_001"),
+    check_interval: int = Form(300)
 ):
-    """Clear all data for the authenticated user or specific client"""
-    try:
-        if not FULL_FEATURES:
-            return {"success": True, "message": "Data cleared (demo mode)"}
-        
-        if client_id:
-            # Clear data for specific client
-            client = db.query(Client).filter(Client.id == client_id).first()
-            if not client:
-                return {"success": False, "message": "Client not found"}
-        else:
-            # Clear data for user's client
-            client = db.query(Client).filter(Client.email == user["email"]).first()
-            if not client:
-                return {"success": True, "message": "No data to clear"}
-        
-        # Delete documents and files
-        documents = db.query(Document).filter(Document.client_id == client.id).all()
-        for doc in documents:
-            # Delete file
-            if doc.file_path and os.path.exists(doc.file_path):
-                try:
-                    os.remove(doc.file_path)
-                except:
-                    pass
-            # Delete from database
-            db.delete(doc)
-        
-        # Delete emails
-        emails = db.query(Email).filter(Email.client_id == client.id).all()
-        for email in emails:
-            db.delete(email)
-        
-        # Delete conversations
-        conversations = db.query(Conversation).filter(Conversation.client_id == client.id).all()
-        for conv in conversations:
-            db.delete(conv)
-        
-        db.commit()
-        
-        # Clear vector store
-        try:
-            vector_service = VectorService()
-            vector_service.reset_client_data(client.id)
-        except Exception as e:
-            print(f"Error clearing vector data: {e}")
-        
-        return {
-            "success": True,
-            "message": f"All data cleared successfully for {client.name}"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Delete document
-@app.delete("/api/documents/{document_id}")
-async def delete_document(
-    document_id: int,
-    client_id: int = Query(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
-):
-    """Delete a document"""
-    try:
-        if not FULL_FEATURES:
-            return {"success": True, "message": "Document deleted (demo mode)"}
-        
-        # Find document
-        query = db.query(Document).filter(Document.id == document_id)
-        if client_id:
-            query = query.filter(Document.client_id == client_id)
-        
-        document = query.first()
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-        
-        # Delete from vector store
-        vector_service = VectorService()
-        vector_service.delete_document_chunks(document.client_id, document_id)
-        
-        # Delete file
-        if document.file_path and os.path.exists(document.file_path):
-            os.remove(document.file_path)
-        
-        # Delete from database
-        db.delete(document)
-        db.commit()
-        
-        return {"success": True, "message": "Document deleted successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# User session info
-@app.get("/api/user/info")
-async def get_user_info(user = Depends(get_current_user)):
-    """Get current user information"""
-    return {
-        "user": user,
-        "session_active": True,
-        "features_available": FULL_FEATURES
-    }
-
-# Gmail conversation endpoints
-@app.get("/api/gmail/conversations")
-async def get_gmail_conversations():
-    """Get available Gmail conversation types"""
-    if gmail_service:
-        conversations = gmail_service.get_available_conversations()
-        return {
-            "success": True,
-            "conversations": conversations
-        }
-    else:
-        return {
-            "success": True,
-            "conversations": {
-                "equity_grant": {
-                    "thread_id": "mock_thread_equity_001",
-                    "subject": "Advisor Equity Grant for Lexsy, Inc.",
-                    "participants": ["alex@founderco.com", "legal@lexsy.com"],
-                    "message_count": 6
-                }
-            }
-        }
-
-@app.get("/api/gmail/conversation/{conversation_type}")
-async def get_gmail_conversation(conversation_type: str):
-    """Get a specific Gmail conversation"""
-    if gmail_service:
-        messages = gmail_service.simulate_mock_conversation(conversation_type)
-        return {
-            "success": True,
-            "conversation_type": conversation_type,
-            "messages": messages
-        }
-    else:
-        return {
-            "success": False,
-            "error": "Gmail service not available"
-        }
-
-# Admin endpoint - list active users (for monitoring)
-@app.get("/api/admin/users")
-async def list_active_users():
-    """List active user sessions (admin only)"""
-    return {
-        "active_sessions": len(user_sessions),
-        "users": [
-            {
-                "email": session["email"],
-                "name": session["name"],
-                "last_active": session["last_active"]
-            }
-            for session in user_sessions.values()
-        ]
-    }
-# Add these enhanced endpoints to your main.py (after existing endpoints)
-
-@app.get("/api/gmail/conversations")
-async def get_available_conversations():
-    """Get available Gmail conversation types for monitoring"""
-    try:
-        if gmail_service:
-            conversations = gmail_service.get_available_conversations()
-            return {
-                "success": True,
-                "conversations": conversations
-            }
-        else:
-            return {
-                "success": True,
-                "conversations": {
-                    "equity_grant": {
-                        "thread_id": "mock_thread_equity_001",
-                        "subject": "Advisor Equity Grant for Lexsy, Inc.",
-                        "participants": ["alex@founderco.com", "legal@lexsy.com"],
-                        "message_count": 6
-                    },
-                    "client_contract": {
-                        "thread_id": "mock_thread_contract_002",
-                        "subject": "Enterprise Software License - MegaCorp Deal",
-                        "participants": ["sales@lexsy.com", "legal@lexsy.com", "counsel@megacorp.com"],
-                        "message_count": 2
-                    }
-                }
-            }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.get("/api/gmail/conversation/{conversation_type}")
-async def get_conversation_preview(conversation_type: str):
-    """Get a preview of a specific conversation"""
-    try:
-        if gmail_service:
-            messages = gmail_service.simulate_mock_conversation(conversation_type)
-            return {
-                "success": True,
-                "conversation_type": conversation_type,
-                "message_count": len(messages),
-                "messages": messages
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Gmail service not available"
-            }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-@app.post("/api/emails/simulate-new-message")
-async def simulate_new_message_in_thread(
-    thread_id: str = Form(...),
-    client_id: int = Form(...),
-    sender: str = Form(...),
-    subject: str = Form(...),
-    body: str = Form(...),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
-):
-    """Simulate a new message arriving in a monitored thread (for demo purposes)"""
-    try:
-        # Create a simulated message with realistic timestamp
-        simulated_message = {
-            "id": f"sim_{int(time.time())}_{thread_id}",
-            "thread_id": thread_id,
-            "subject": subject,
-            "sender": sender,
-            "recipient": "legal@lexsy.com",
-            "body": body,
-            "snippet": body[:100] + "..." if len(body) > 100 else body,
-            "date": datetime.now().isoformat() + "Z",
-            "label_ids": ["INBOX"],
-            "is_simulated": True
-        }
-        
-        if FULL_FEATURES and db:
-            # Save to database
-            email = Email(
-                client_id=client_id,
-                gmail_message_id=simulated_message["id"],
-                gmail_thread_id=thread_id,
-                subject=subject,
-                sender=sender,
-                recipient="legal@lexsy.com",
-                body=body,
-                snippet=simulated_message["snippet"],
-                date_sent=datetime.now(),
-                is_processed=True
-            )
-            
-            db.add(email)
-            db.commit()
-            
-            # Add to vector store
-            vector_service = VectorService()
-            email_content = f"Subject: {subject}\nFrom: {sender}\nTo: legal@lexsy.com\n\n{body}"
-            
-            chunk_ids = vector_service.add_email_to_vector_store(
-                client_id=client_id,
-                email_id=email.id,
-                email_content=email_content,
-                metadata={
-                    "subject": subject,
-                    "sender": sender,
-                    "recipient": "legal@lexsy.com",
-                    "thread_id": thread_id,
-                    "user_email": user["email"],
-                    "simulated_message": True
-                }
-            )
-            
-            if chunk_ids:
-                email.chunk_ids = json.dumps(chunk_ids)
-                email.is_processed = True
-                db.commit()
-        
-        return {
-            "success": True,
-            "message": "Simulated new message added to thread",
-            "simulated_message": simulated_message,
-            "thread_id": thread_id
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to simulate message: {str(e)}")
-
-@app.get("/api/emails/thread/{thread_id}")
-async def get_thread_messages(
-    thread_id: str,
-    client_id: int = Query(None),
-    user = Depends(get_current_user),
-    db = Depends(get_db)
-):
-    """Get all messages in a specific thread"""
-    try:
-        if not FULL_FEATURES:
-            # Return mock data based on thread_id
-            if gmail_service:
-                if thread_id == "mock_thread_equity_001":
-                    messages = gmail_service.simulate_mock_conversation("equity_grant")
-                elif thread_id == "mock_thread_contract_002":
-                    messages = gmail_service.simulate_mock_conversation("client_contract")
-                else:
-                    messages = gmail_service.simulate_mock_conversation("equity_grant")
-                
-                return {
-                    "success": True,
-                    "thread_id": thread_id,
-                    "message_count": len(messages),
-                    "messages": messages
-                }
-            else:
-                return {"success": False, "error": "Gmail service not available"}
-        
-        # Get thread messages from database
-        if client_id:
-            emails = db.query(Email).filter(
-                Email.gmail_thread_id == thread_id,
-                Email.client_id == client_id
-            ).order_by(Email.date_sent.asc()).all()
-        else:
-            # Get from any client for this user
-            client = db.query(Client).filter(Client.email == user["email"]).first()
-            if not client:
-                return {"success": False, "error": "No client found"}
-            
-            emails = db.query(Email).filter(
-                Email.gmail_thread_id == thread_id,
-                Email.client_id == client.id
-            ).order_by(Email.date_sent.asc()).all()
-        
-        return {
-            "success": True,
-            "thread_id": thread_id,
-            "message_count": len(emails),
-            "messages": [email.to_dict() for email in emails]
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get thread messages: {str(e)}")
-
-@app.post("/api/emails/refresh-monitoring")
-async def refresh_monitoring_status(user = Depends(get_current_user)):
-    """Manually refresh monitoring status and check for new messages"""
+    """Start monitoring a specific Gmail thread for a client"""
     try:
         if not FULL_FEATURES or not gmail_service:
             return {
                 "success": True,
-                "message": "Monitoring refreshed (demo mode)",
-                "new_messages_found": 0,
-                "last_check": datetime.now().isoformat()
+                "message": f"Started monitoring thread {thread_id} for client {client_id} (demo mode)",
+                "monitoring": {
+                    "thread_id": thread_id,
+                    "client_id": client_id,
+                    "check_interval": check_interval,
+                    "status": "active",
+                    "demo_mode": True
+                }
             }
         
-        # Force a check of all monitored threads
+        result = gmail_service.start_thread_monitoring(thread_id, client_id, check_interval)
+        
+        if result["success"]:
+            result["monitoring"] = {
+                "thread_id": thread_id,
+                "client_id": client_id,
+                "check_interval": check_interval,
+                "status": "active",
+                "started_at": datetime.now().isoformat()
+            }
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start monitoring: {str(e)}")
+
+@app.get("/api/emails/monitoring-status")
+async def get_monitoring_status():
+    """Get Gmail monitoring status"""
+    try:
+        if not FULL_FEATURES or not gmail_service:
+            return {
+                "total_monitors": 1,
+                "active_monitors": [
+                    {
+                        "thread_id": "mock_thread_equity_001",
+                        "client_id": 1,
+                        "started_at": datetime.now().isoformat(),
+                        "last_check": datetime.now().isoformat(),
+                        "messages_found": 6,
+                        "demo_mode": True
+                    }
+                ]
+            }
+        
         status = gmail_service.get_monitoring_status()
-        new_messages_count = 0
-        
-        for monitor in status.get("active_monitors", []):
-            # Simulate finding new messages occasionally
-            import random
-            if random.random() < 0.3:  # 30% chance of "new" message
-                new_messages_count += 1
-        
-        return {
-            "success": True,
-            "message": f"Monitoring refreshed - found {new_messages_count} new messages",
-            "new_messages_found": new_messages_count,
-            "last_check": datetime.now().isoformat(),
-            "active_monitors": len(status.get("active_monitors", []))
-        }
+        return status
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to refresh monitoring: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get monitoring status: {str(e)}")
 
-# Add a comprehensive demo endpoint that shows the full email monitoring flow
-@app.post("/api/demo/gmail-monitoring-flow")
-async def demo_gmail_monitoring_flow(
-    client_id: int = Form(1),
-    user = Depends(get_current_user)
-):
-    """Demonstrate the complete Gmail monitoring flow with realistic timeline"""
-    try:
-        demo_steps = []
-        
-        # Step 1: Connect Gmail (simulated)
-        demo_steps.append({
-            "step": 1,
-            "action": "Connect Gmail",
-            "status": "completed",
-            "message": "Gmail OAuth completed successfully",
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Step 2: Start monitoring thread
-        demo_steps.append({
-            "step": 2,
-            "action": "Start Thread Monitoring",
-            "status": "completed", 
-            "message": "Started monitoring 'Advisor Equity Grant' thread",
-            "thread_id": "mock_thread_equity_001",
-            "check_interval": "5 minutes",
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Step 3: Simulate finding existing messages
-        demo_steps.append({
-            "step": 3,
-            "action": "Initial Scan",
-            "status": "completed",
-            "message": "Found 6 existing messages in thread",
-            "messages_found": 6,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Step 4: Simulate ongoing monitoring
-        demo_steps.append({
-            "step": 4,
-            "action": "Background Monitoring",
-            "status": "active",
-            "message": "Monitoring active - checking every 5 minutes for new messages",
-            "next_check": (datetime.now() + timedelta(minutes=5)).isoformat(),
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Step 5: Simulate new message detection (future)
-        demo_steps.append({
-            "step": 5,
-            "action": "New Message Detected",
-            "status": "pending",
-            "message": "Will automatically process any new messages in this thread",
-            "auto_processing": True,
-            "timestamp": "future"
-        })
-        
-        return {
-            "success": True,
-            "message": "Gmail monitoring flow demonstration",
-            "client_id": client_id,
-            "demo_steps": demo_steps,
-            "monitoring_features": [
-                "Real-time Gmail OAuth integration",
-                "Background thread monitoring every 5 minutes", 
-                "Automatic message ingestion and processing",
-                "Vector indexing for AI search",
-                "Multi-client data isolation",
-                "Live status updates and notifications"
-            ],
-            "sample_questions": [
-                "What new developments are there in the equity grant discussion?",
-                "Has John Smith responded to the advisor agreement?",
-                "What are the latest updates on the documentation timeline?",
-                "Are there any new requirements or changes to the equity terms?"
-            ]
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Demo flow failed: {str(e)}")
+# ======================
+# ERROR HANDLERS AND DEBUG
+# ======================
 
-# Enhanced thread monitoring with webhook simulation
-@app.post("/api/emails/webhook-simulation")
-async def simulate_gmail_webhook(
-    thread_id: str = Form(...),
-    client_id: int = Form(...),
-    action: str = Form("new_message"),  # new_message, message_updated, thread_updated
-    user = Depends(get_current_user)
-):
-    """Simulate Gmail webhook notifications for real-time monitoring"""
-    try:
-        webhook_data = {
-            "timestamp": datetime.now().isoformat(),
-            "thread_id": thread_id,
-            "client_id": client_id,
-            "action": action,
-            "notification_id": f"webhook_{int(time.time())}"
-        }
-        
-        if action == "new_message":
-            # Simulate a new message arriving
-            webhook_data.update({
-                "message": "New message detected in monitored thread",
-                "auto_actions": [
-                    "Message extracted and parsed",
-                    "Added to vector database for AI search",
-                    "Client notification sent",
-                    "Ready for AI analysis"
-                ]
-            })
-        elif action == "message_updated":
-            webhook_data.update({
-                "message": "Existing message was updated or modified",
-                "auto_actions": [
-                    "Re-indexed updated content",
-                    "Vector embeddings refreshed"
-                ]
-            })
-        elif action == "thread_updated":
-            webhook_data.update({
-                "message": "Thread metadata or labels updated",
-                "auto_actions": [
-                    "Thread categorization updated",
-                    "Monitoring preferences adjusted"
-                ]
-            })
-        
-        return {
-            "success": True,
-            "webhook_simulation": webhook_data,
-            "message": f"Simulated Gmail webhook: {action}",
-            "real_world_note": "In production, Gmail would send push notifications via webhook for instant updates"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Webhook simulation failed: {str(e)}")
-# Debug endpoint to list all routes
-@app.get("/debug/routes")
-async def list_routes():
-    """List all available routes for debugging"""
-    routes = []
-    for route in app.routes:
-        if hasattr(route, 'methods') and hasattr(route, 'path'):
-            routes.append({
-                "path": route.path,
-                "methods": list(route.methods),
-                "name": getattr(route, 'name', 'unnamed')
-            })
-    return {
-        "total_routes": len(routes),
-        "routes": sorted(routes, key=lambda x: x["path"])
-    }
-
-# Add error handler for 404s
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
     """Custom 404 handler"""
@@ -1593,13 +1156,12 @@ async def not_found_handler(request: Request, exc):
                 "/health", 
                 "/api/status",
                 "/api/clients",
-                "/api/documents/upload",
-                "/api/documents/list",
-                "/api/emails/list",
-                "/api/chat/ask",
+                "/api/documents/{client_id}/upload",
+                "/api/documents/{client_id}/documents",
+                "/api/emails/{client_id}/emails",
+                "/api/chat/{client_id}/ask",
                 "/api/auth/gmail/auth-url",
-                "/api/demo/load-sample",
-                "/api/emails/start-thread-monitoring"
+                "/api/demo/initialize-full"
             ]
         }
     )
@@ -1614,5 +1176,328 @@ if __name__ == "__main__":
         "main:app", 
         host="0.0.0.0", 
         port=port,
-        reload=False  # Disable reload in production
-    )
+        reload=False
+    )()
+        if not client:
+            db.close()
+            return {"client_id": client_id, "total_documents": 0, "documents": [], "error": "Client not found"}
+        
+        # Get client documents
+        documents = db.query(Document).filter(
+            Document.client_id == client_id
+        ).offset(skip).limit(limit).all()
+        
+        result = {
+            "client_id": client_id,
+            "client_name": client.name,
+            "total_documents": len(documents),
+            "documents": [doc.to_dict() for doc in documents]
+        }
+        
+        db.close()
+        return result
+        
+    except Exception as e:
+        return {
+            "client_id": client_id,
+            "total_documents": 0,
+            "documents": [],
+            "error": str(e)
+        }
+
+@app.post("/api/documents/{client_id}/upload-sample-documents")
+async def upload_sample_documents(client_id: int):
+    """Upload sample documents for demo client"""
+    try:
+        if not FULL_FEATURES:
+            return {
+                "success": True,
+                "message": f"Uploaded sample documents for client {client_id} (demo mode)",
+                "documents": []
+            }
+        
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            return {"success": False, "error": "Client not found"}
+        
+        # Initialize services
+        vector_service = VectorService()
+        doc_service = DocumentService()
+        
+        # Get sample documents
+        sample_docs = doc_service.get_sample_documents()
+        
+        uploaded_docs = []
+        
+        for sample_doc in sample_docs:
+            # Check if document already exists
+            existing_doc = db.query(Document).filter(
+                Document.client_id == client_id,
+                Document.original_filename == sample_doc["original_filename"]
+            ).first()
+            
+            if existing_doc:
+                uploaded_docs.append(existing_doc.to_dict())
+                continue
+            
+            # Create document record
+            document = Document(
+                client_id=client_id,
+                filename=sample_doc["filename"],
+                original_filename=sample_doc["original_filename"],
+                file_type=sample_doc["file_type"],
+                file_size=len(sample_doc["content"]),
+                extracted_text=sample_doc["content"],
+                processing_status="completed"
+            )
+            
+            db.add(document)
+            db.commit()
+            db.refresh(document)
+            
+            # Add to vector store with client isolation
+            chunk_ids = vector_service.add_document_to_vector_store(
+                client_id=client_id,
+                document_id=document.id,
+                text=sample_doc["content"],
+                metadata={
+                    "filename": document.original_filename,
+                    "file_type": document.file_type,
+                    "created_at": document.created_at.isoformat(),
+                    "sample_document": True
+                }
+            )
+            
+            if chunk_ids:
+                document.chunk_ids = json.dumps(chunk_ids)
+                db.commit()
+            
+            uploaded_docs.append(document.to_dict())
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "message": f"Uploaded {len(uploaded_docs)} sample documents",
+            "documents": uploaded_docs
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ======================
+# EMAIL ENDPOINTS
+# ======================
+
+@app.get("/api/emails/{client_id}/emails")
+async def get_client_emails(
+    client_id: int,
+    skip: int = 0,
+    limit: int = 50,
+    thread_id: Optional[str] = None
+):
+    """Get emails for specific client"""
+    try:
+        if not FULL_FEATURES:
+            if client_id == 1:  # Lexsy sample emails
+                sample_emails = []
+                if gmail_service:
+                    sample_emails = gmail_service.simulate_mock_conversation("equity_grant")
+                
+                # Filter by thread if specified
+                if thread_id:
+                    sample_emails = [email for email in sample_emails if email.get("thread_id") == thread_id]
+                
+                return {
+                    "client_id": client_id,
+                    "client_name": "Lexsy, Inc.",
+                    "total_emails": len(sample_emails),
+                    "thread_filter": thread_id,
+                    "emails": sample_emails
+                }
+            else:
+                return {
+                    "client_id": client_id,
+                    "client_name": f"Client {client_id}",
+                    "total_emails": 0,
+                    "emails": []
+                }
+        
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            return {"client_id": client_id, "total_emails": 0, "emails": [], "error": "Client not found"}
+        
+        # Build query for client emails
+        query = db.query(Email).filter(Email.client_id == client_id)
+        
+        if thread_id:
+            query = query.filter(Email.gmail_thread_id == thread_id)
+        
+        emails = query.order_by(Email.date_sent.desc()).offset(skip).limit(limit).all()
+        
+        result = {
+            "client_id": client_id,
+            "client_name": client.name,
+            "total_emails": len(emails),
+            "thread_filter": thread_id,
+            "emails": [email.to_dict() for email in emails]
+        }
+        
+        db.close()
+        return result
+        
+    except Exception as e:
+        return {
+            "client_id": client_id,
+            "total_emails": 0,
+            "emails": [],
+            "error": str(e)
+        }
+
+@app.post("/api/emails/{client_id}/ingest-sample-emails")
+async def ingest_sample_emails(client_id: int):
+    """Ingest sample Lexsy email thread for demo"""
+    try:
+        if not FULL_FEATURES:
+            return {
+                "success": True,
+                "message": f"Processed sample emails for client {client_id} (demo mode)",
+                "emails_processed": 6,
+                "emails": []
+            }
+        
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            return {"success": False, "error": "Client not found"}
+        
+        # Initialize services
+        vector_service = VectorService()
+        ai_service = AIService()
+        
+        # Get sample emails
+        sample_emails = []
+        if gmail_service:
+            sample_emails = gmail_service.simulate_mock_conversation("equity_grant")
+        
+        processed_emails = []
+        
+        for email_data in sample_emails:
+            # Check if email already exists
+            existing_email = db.query(Email).filter(
+                Email.gmail_message_id == email_data["id"],
+                Email.client_id == client_id
+            ).first()
+            
+            if existing_email:
+                processed_emails.append(existing_email.to_dict())
+                continue
+            
+            # Parse date
+            date_sent = None
+            if email_data.get("date"):
+                try:
+                    date_sent = datetime.fromisoformat(email_data["date"].replace("Z", "+00:00"))
+                except:
+                    pass
+            
+            # Create email record
+            email = Email(
+                client_id=client_id,
+                gmail_message_id=email_data["id"],
+                gmail_thread_id=email_data["thread_id"],
+                subject=email_data["subject"],
+                sender=email_data["sender"],
+                recipient=email_data["recipient"],
+                body=email_data["body"],
+                snippet=email_data["snippet"],
+                date_sent=date_sent,
+                labels=json.dumps([]),
+                is_processed=False
+            )
+            
+            db.add(email)
+            db.commit()
+            db.refresh(email)
+            
+            # Add to client-specific vector store
+            email_content = f"Subject: {email_data['subject']}\nFrom: {email_data['sender']}\nTo: {email_data['recipient']}\nDate: {email_data.get('date', '')}\n\n{email_data['body']}"
+            
+            chunk_ids = vector_service.add_email_to_vector_store(
+                client_id=client_id,
+                email_id=email.id,
+                email_content=email_content,
+                metadata={
+                    "subject": email_data["subject"],
+                    "sender": email_data["sender"],
+                    "recipient": email_data["recipient"],
+                    "date": email_data.get("date", ""),
+                    "thread_id": email_data["thread_id"],
+                    "sample_email": True
+                }
+            )
+            
+            if chunk_ids:
+                email.chunk_ids = json.dumps(chunk_ids)
+                email.is_processed = True
+                db.commit()
+            
+            processed_emails.append(email.to_dict())
+        
+        # Generate thread summary
+        thread_summary = ""
+        if ai_service and sample_emails:
+            summary_result = ai_service.generate_email_thread_summary(sample_emails)
+            thread_summary = summary_result.get("summary", "")
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "message": f"Processed {len(processed_emails)} sample emails",
+            "emails_processed": len(processed_emails),
+            "emails": processed_emails,
+            "thread_summary": thread_summary
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/emails/{client_id}/email-threads")
+async def get_email_threads(client_id: int):
+    """Get all email threads for a client"""
+    try:
+        if not FULL_FEATURES:
+            if client_id == 1:  # Lexsy threads
+                return {
+                    "client_id": client_id,
+                    "total_threads": 1,
+                    "threads": [
+                        {
+                            "thread_id": "mock_thread_equity_001",
+                            "message_count": 6,
+                            "latest_date": datetime.now().isoformat(),
+                            "subject": "Advisor Equity Grant for Lexsy, Inc.",
+                            "participants": "alex@founderco.com ↔ legal@lexsy.com",
+                            "snippet": "We'd like to bring on a new advisor for Lexsy, Inc..."
+                        }
+                    ]
+                }
+            else:
+                return {"client_id": client_id, "total_threads": 0, "threads": []}
+        
+        db = SessionLocal()
+        
+        # Verify client exists
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first
