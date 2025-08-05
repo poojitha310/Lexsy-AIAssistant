@@ -190,7 +190,7 @@ class VectorService:
                     "char_count": chunk["char_count"],
                     "source_type": "document",
                     "content_type": "legal_document",
-                    **metadata
+                    
                 }
                 metadatas.append(chunk_metadata)
             
@@ -254,7 +254,7 @@ class VectorService:
                     "char_count": chunk["char_count"],
                     "source_type": "email",
                     "content_type": "legal_email",
-                    **metadata
+                    
                 }
                 metadatas.append(chunk_metadata)
             
