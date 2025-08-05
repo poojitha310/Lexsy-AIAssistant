@@ -183,7 +183,7 @@ class VectorService:
                 documents.append(chunk["text"])
                 
                 chunk_metadata = {
-                    "client_id": client_id,
+                    "client_id": str(client_id),
                     "document_id": document_id,
                     "chunk_index": i,
                     "word_count": chunk["word_count"],
@@ -247,7 +247,7 @@ class VectorService:
                 documents.append(chunk["text"])
                 
                 chunk_metadata = {
-                    "client_id": client_id,
+                    "client_id": str(client_id),
                     "email_id": email_id,
                     "chunk_index": i,
                     "word_count": chunk["word_count"],
