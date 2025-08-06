@@ -40,13 +40,14 @@ class VectorService:
                 print(f"📂 Retrieved existing collection for client {client_id}")
             except Exception:
                 # Create new collection if it doesn't exist
+                # FIXED: Remove list from metadata - ChromaDB doesn't accept lists
                 collection = self.chroma_client.create_collection(
                     name=collection_name,
                     metadata={
                         "description": f"Legal documents and emails for client {client_id}",
-                        "client_id": client_id,
+                        "client_id": str(client_id),  # Convert to string
                         "created_at": datetime.now().isoformat(),
-                        "content_types": ["documents", "emails"]
+                        "content_types": "documents,emails"  # Convert list to comma-separated string
                     }
                 )
                 print(f"🆕 Created new collection for client {client_id}")
@@ -182,15 +183,18 @@ class VectorService:
                 chunk_ids.append(chunk_id)
                 documents.append(chunk["text"])
                 
+                # FIXED: Only use primitive types in metadata - no lists or nested objects
                 chunk_metadata = {
                     "client_id": str(client_id),
-                    "document_id": document_id,
+                    "document_id": str(document_id),  # Convert to string
                     "chunk_index": i,
                     "word_count": chunk["word_count"],
                     "char_count": chunk["char_count"],
                     "source_type": "document",
                     "content_type": "legal_document",
-                    
+                    "filename": metadata.get("filename", "unknown"),
+                    "file_type": metadata.get("file_type", "unknown"),
+                    "created_at": metadata.get("created_at", datetime.now().isoformat())
                 }
                 metadatas.append(chunk_metadata)
             
@@ -246,15 +250,20 @@ class VectorService:
                 chunk_ids.append(chunk_id)
                 documents.append(chunk["text"])
                 
+                # FIXED: Only use primitive types in metadata
                 chunk_metadata = {
                     "client_id": str(client_id),
-                    "email_id": email_id,
+                    "email_id": str(email_id),  # Convert to string
                     "chunk_index": i,
                     "word_count": chunk["word_count"],
                     "char_count": chunk["char_count"],
                     "source_type": "email",
                     "content_type": "legal_email",
-                    
+                    "subject": metadata.get("subject", "unknown"),
+                    "sender": metadata.get("sender", "unknown"),
+                    "recipient": metadata.get("recipient", "unknown"),
+                    "date": metadata.get("date", "unknown"),
+                    "thread_id": metadata.get("thread_id", "unknown")
                 }
                 metadatas.append(chunk_metadata)
             
@@ -289,7 +298,7 @@ class VectorService:
                 return []
             
             # Prepare where clause for client isolation and filtering
-            where_clause = {"client_id": client_id}
+            where_clause = {"client_id": str(client_id)}  # Convert to string
             if source_filter:
                 where_clause["source_type"] = source_filter
             
@@ -337,7 +346,7 @@ class VectorService:
             
             # Get all items for this client
             results = collection.get(
-                where={"client_id": client_id},
+                where={"client_id": str(client_id)},  # Convert to string
                 include=["metadatas"]
             )
             
@@ -403,8 +412,8 @@ class VectorService:
             # Get all chunk IDs for this document with client verification
             results = collection.get(
                 where={
-                    "client_id": client_id,
-                    "document_id": document_id,
+                    "client_id": str(client_id),
+                    "document_id": str(document_id),
                     "source_type": "document"
                 }
             )
@@ -429,8 +438,8 @@ class VectorService:
             # Get all chunk IDs for this email with client verification
             results = collection.get(
                 where={
-                    "client_id": client_id,
-                    "email_id": email_id,
+                    "client_id": str(client_id),
+                    "email_id": str(email_id),
                     "source_type": "email"
                 }
             )
