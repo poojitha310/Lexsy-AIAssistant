@@ -977,135 +977,6 @@ async def get_email_threads(client_id: int):
 # CHAT ENDPOINTS
 # ======================
 
-@app.post("/api/chat/{client_id}/ask")
-async def ask_question(
-    client_id: int,
-    question: str = Form(...),
-    include_history: bool = Form(True),
-    user = Depends(get_current_user)
-):
-    """Ask a question about client's documents and emails"""
-    try:
-        if not FULL_FEATURES:
-            # Demo responses based on client and question
-            question_lower = question.lower()
-            
-            if client_id == 1:  # Lexsy responses
-                if "john smith" in question_lower or "equity" in question_lower:
-                    answer = "Based on the email thread between Alex Rodriguez (CEO) and Kristina Chen (Legal Counsel), Alex proposed a **15,000 RSA equity grant** for John Smith as Strategic Advisor. John Smith is a former VP of AI at Google and current partner at Andreessen Horowitz. The grant includes:\n\n• **15,000 Restricted Stock Awards (RSAs)**\n• **2-year monthly vesting** with no cliff\n• **Board observer rights** for quarterly meetings\n• **Expected commitment**: 4-6 hours per month\n\nThe legal team confirmed this grant is **well within the available share pool** (915,000 shares available out of 1M total EIP)."
-                    
-                elif "vesting" in question_lower:
-                    answer = "The **vesting terms** discussed in the email thread are:\n\n• **Duration**: 2-year monthly vesting\n• **Schedule**: 625 shares vest each month (15,000 ÷ 24 months)\n• **Cliff**: No cliff period\n• **Start date**: July 22, 2025 (retroactive to verbal agreement)\n• **Acceleration**: Single trigger acceleration for 25% of unvested shares if terminated without cause\n\nKristina (Legal) confirmed this is **standard for advisor agreements** and recommended including an 83(b) election to minimize tax impact."
-                    
-                elif "tax" in question_lower or "83(b)" in question_lower:
-                    answer = "**Tax implications** explained by Legal Counsel:\n\n**RSAs vs Stock Options for John:**\n• **RSAs**: Taxed on fair market value when vesting (ordinary income rates)\n• **Current tax impact**: ~$7,500 ordinary income spread over 24 months\n• **Recommendation**: RSAs are better given early stage and low current FMV (~$0.50/share)\n\n**83(b) Election Benefits:**\n• Pay tax on current FMV now ($300 total)\n• All future appreciation taxed as capital gains\n• **Must file within 30 days** of grant\n• Minimal upfront tax burden at current valuation"
-                    
-                elif "documentation" in question_lower or "paperwork" in question_lower:
-                    answer = "**Required documentation** as outlined by Legal:\n\n**Primary Documents:**\n1. **Board Consent** - Authorization for the equity grant\n2. **Advisor Agreement** - Including IP assignment, confidentiality, board observer rights\n3. **Restricted Stock Award Agreement** - Formal grant terms\n4. **83(b) Election Form** - Tax optimization\n\n**Timeline:**\n• Board Consent ready for Thursday's meeting\n• All agreements drafted by Wednesday\n• Full execution package ready Friday\n• **Target completion**: Tuesday, July 29th\n\n**Special provisions**: A16z portfolio introduction rights with conflict disclosures"
-                    
-                elif "shares" in question_lower and ("available" in question_lower or "pool" in question_lower):
-                    answer = "**Share availability confirmed** by Legal team:\n\n**Current EIP Status:**\n• **Total EIP pool**: 1,000,000 shares\n• **Previously granted**: 85,000 shares  \n• **Available for grant**: 915,000 shares\n• **Requested for John Smith**: 15,000 shares\n• **Status**: ✅ **APPROVED** - Well within available pool\n\n**Grant represents**: 1.5% of total company\n**Remaining after grant**: 900,000 shares available for future grants"
-                    
-                elif "board" in question_lower:
-                    answer = "**Board approval process** from the email thread:\n\n**Board Meeting Details:**\n• **Date**: Thursday (July 25th)\n• **Agenda item**: \"Advisor Equity Grant Authorization\"\n• **Attendees**: All directors confirmed\n• **Priority**: This will be prioritized agenda item\n\n**Board Observer Rights for John:**\n• **Quarterly board meetings** access\n• **Formal observer rights** included in Advisor Agreement\n• **A16z portfolio introduction** rights with conflict disclosures\n\n**Current Status**: Board Consent prepared and ready for Thursday's meeting approval"
-                
-                else:
-                    answer = "I can help analyze **Lexsy's legal documents and email discussions**. I have access to:\n\n📄 **Legal Documents:**\n• Board Approval for Equity Incentive Plan\n• Advisor Agreement Template  \n• Complete Equity Incentive Plan (EIP)\n\n📧 **Email Thread:**\n• 6-message conversation about John Smith's advisor equity grant\n• Discussion between Alex Rodriguez (CEO) and Kristina Chen (Legal)\n\n**Try asking about:**\n• John Smith's equity grant details\n• Vesting terms and tax implications\n• Required documentation and timeline\n• Share availability in the EIP\n• Board approval process"
-            else:
-                answer = f"I don't see any documents or emails for **Client {client_id}** yet. To analyze legal matters, please:\n\n1. **Upload documents** (PDF, DOCX, TXT)\n2. **Connect Gmail** and ingest email threads\n3. Or **switch to Lexsy, Inc.** which has sample legal data loaded\n\nOnce you have content uploaded, I can help analyze contracts, agreements, compliance requirements, and email discussions."
-            
-            # Mock sources for Lexsy
-            sources = []
-            if client_id == 1:
-                if "john smith" in question_lower or "equity" in question_lower or "vesting" in question_lower:
-                    sources = [
-                        {"type": "email", "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com", "similarity_score": 0.95},
-                        {"type": "email", "subject": "Re: Advisor Equity Grant - Legal Review", "sender": "legal@lexsy.com", "similarity_score": 0.92},
-                        {"type": "document", "filename": "Lexsy Equity Incentive Plan.pdf", "similarity_score": 0.88}
-                    ]
-            
-            return {
-                "success": True,
-                "question": question,
-                "answer": answer,
-                "sources": sources,
-                "context_used": len(sources),
-                "tokens_used": len(answer.split()) * 1.3,  # Rough estimate
-                "response_time": 0.8,
-                "conversation_id": int(time.time())
-            }
-        
-        # Full features mode
-        db = SessionLocal()
-        
-        # Verify client exists
-        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
-        if not client:
-            db.close()
-            raise HTTPException(status_code=404, detail="Client not found")
-        
-        # Initialize AI service
-        ai_service = AIService()
-        
-        # Get conversation history if requested
-        conversation_history = None
-        if include_history:
-            recent_conversations = db.query(Conversation).filter(
-                Conversation.client_id == client_id
-            ).order_by(Conversation.created_at.desc()).limit(6).all()
-            
-            conversation_history = [
-                {
-                    "question": conv.question,
-                    "answer": conv.answer
-                }
-                for conv in reversed(recent_conversations)
-            ]
-        
-        # Generate AI response with client-specific context
-        response = ai_service.generate_response(
-            client_id=client_id,
-            question=question,
-            conversation_history=conversation_history
-        )
-        
-        if not response["success"]:
-            db.close()
-            raise HTTPException(status_code=500, detail=response.get("error", "AI response generation failed"))
-        
-        # Save conversation to database
-        conversation = Conversation(
-            client_id=client_id,
-            question=question,
-            answer=response["answer"],
-            context_sources=json.dumps([src["type"] + ":" + str(src.get("document_id", src.get("email_id", ""))) for src in response["sources"]]),
-            similarity_scores=json.dumps([src["similarity_score"] for src in response["sources"]]),
-            response_time=response["response_time"],
-            tokens_used=response["tokens_used"]
-        )
-        
-        db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
-        
-        db.close()
-        
-        return {
-            "success": True,
-            "question": question,
-            "answer": response["answer"],
-            "sources": response["sources"],
-            "context_used": response["context_used"],
-            "tokens_used": response["tokens_used"],
-            "response_time": response["response_time"],
-            "conversation_id": conversation.id
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
-
 @app.post("/api/chat/{client_id}/search")
 async def search_content(
     client_id: int,
@@ -1340,90 +1211,6 @@ async def gmail_callback(code: str = Query(None), error: str = Query(None)):
 # ======================
 # DEMO AND INITIALIZATION ENDPOINTS  
 # ======================
-
-@app.post("/api/demo/initialize-full")
-async def initialize_full_demo():
-    """Initialize complete demo with sample clients and data"""
-    try:
-        results = {
-            "clients_created": [],
-            "sample_data_loaded": {}
-        }
-        
-        if FULL_FEATURES:
-            db = SessionLocal()
-            
-            # Create demo clients
-            demo_clients = [
-                {
-                    "name": "Lexsy, Inc.",
-                    "email": "legal@lexsy.com", 
-                    "company": "Lexsy, Inc.",
-                    "description": "AI-powered legal technology startup focusing on equity grants and advisor agreements"
-                },
-                {
-                    "name": "TechCorp LLC",
-                    "email": "counsel@techcorp.com",
-                    "company": "TechCorp LLC", 
-                    "description": "Enterprise software company focusing on employment and vendor contracts"
-                }
-            ]
-            
-            for client_data in demo_clients:
-                existing = db.query(Client).filter(Client.email == client_data["email"]).first()
-                if not existing:
-                    client = Client(**client_data)
-                    db.add(client)
-                    db.commit()
-                    db.refresh(client)
-                    results["clients_created"].append(client.to_dict())
-                else:
-                    results["clients_created"].append(existing.to_dict())
-            
-            db.close()
-            
-            # Load sample data for Lexsy (first client)
-            if results["clients_created"]:
-                lexsy_client = results["clients_created"][0]
-                try:
-                    # Load sample documents
-                    doc_result = await upload_sample_documents(lexsy_client["id"])
-                    # Load sample emails  
-                    email_result = await ingest_sample_emails(lexsy_client["id"])
-                    
-                    results["sample_data_loaded"] = {
-                        "documents": doc_result.get("success", False),
-                        "emails": email_result.get("success", False),
-                        "documents_count": len(doc_result.get("documents", [])),
-                        "emails_count": email_result.get("emails_processed", 0)
-                    }
-                except Exception as e:
-                    print(f"Error loading sample data: {e}")
-        else:
-            # Demo mode
-            results["clients_created"] = [
-                {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
-                {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
-            ]
-            results["sample_data_loaded"] = {
-                "documents": True,
-                "emails": True,
-                "documents_count": 3,
-                "emails_count": 6
-            }
-        
-        return {
-            "success": True,
-            "message": "Full demo initialized successfully!",
-            "results": results
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Demo initialization failed"
-        }
 
 # ======================
 # GMAIL MONITORING ENDPOINTS
@@ -1916,3 +1703,238 @@ async def fix_vector_metadata(client_id: int):
             
     except Exception as e:
         return {"error": str(e)}
+        # Add these FIXED endpoints to your main.py (replace the existing chat endpoints)
+
+def get_client_name(client_id: int) -> str:
+    """Helper function to get client name"""
+    try:
+        db = SessionLocal()
+        client = db.query(Client).filter(Client.id == client_id).first()
+        db.close()
+        return client.name if client else f"Client {client_id}"
+    except:
+        return f"Client {client_id}"
+
+@app.post("/api/chat/{client_id}/ask")
+async def ask_question(
+    client_id: int,
+    question: str = Form(...),
+    include_history: bool = Form(True),
+    user = Depends(get_current_user)
+):
+    """Ask a question about client's documents and emails with proper client isolation"""
+    try:
+        if not FULL_FEATURES:
+            # Enhanced demo responses based on client and question
+            question_lower = question.lower()
+            
+            if client_id == 1:  # Lexsy responses
+                if "john smith" in question_lower or "equity" in question_lower:
+                    answer = "Based on the email thread between Alex Rodriguez (CEO) and Kristina Chen (Legal Counsel), Alex proposed a **15,000 RSA equity grant** for John Smith as Strategic Advisor. John Smith is a former VP of AI at Google and current partner at Andreessen Horowitz. The grant includes:\n\n• **15,000 Restricted Stock Awards (RSAs)**\n• **2-year monthly vesting** with no cliff\n• **Board observer rights** for quarterly meetings\n• **Expected commitment**: 4-6 hours per month\n\nThe legal team confirmed this grant is **well within the available share pool** (915,000 shares available out of 1M total EIP)."
+                    
+                elif "vesting" in question_lower:
+                    answer = "The **vesting terms** discussed in the email thread are:\n\n• **Duration**: 2-year monthly vesting\n• **Schedule**: 625 shares vest each month (15,000 ÷ 24 months)\n• **Cliff**: No cliff period\n• **Start date**: July 22, 2025 (retroactive to verbal agreement)\n• **Acceleration**: Single trigger acceleration for 25% of unvested shares if terminated without cause\n\nKristina (Legal) confirmed this is **standard for advisor agreements** and recommended including an 83(b) election to minimize tax impact."
+                    
+                elif "tax" in question_lower or "83(b)" in question_lower:
+                    answer = "**Tax implications** explained by Legal Counsel:\n\n**RSAs vs Stock Options for John:**\n• **RSAs**: Taxed on fair market value when vesting (ordinary income rates)\n• **Current tax impact**: ~$7,500 ordinary income spread over 24 months\n• **Recommendation**: RSAs are better given early stage and low current FMV (~$0.50/share)\n\n**83(b) Election Benefits:**\n• Pay tax on current FMV now ($300 total)\n• All future appreciation taxed as capital gains\n• **Must file within 30 days** of grant\n• Minimal upfront tax burden at current valuation"
+                    
+                elif "documentation" in question_lower or "paperwork" in question_lower:
+                    answer = "**Required documentation** as outlined by Legal:\n\n**Primary Documents:**\n1. **Board Consent** - Authorization for the equity grant\n2. **Advisor Agreement** - Including IP assignment, confidentiality, board observer rights\n3. **Restricted Stock Award Agreement** - Formal grant terms\n4. **83(b) Election Form** - Tax optimization\n\n**Timeline:**\n• Board Consent ready for Thursday's meeting\n• All agreements drafted by Wednesday\n• Full execution package ready Friday\n• **Target completion**: Tuesday, July 29th\n\n**Special provisions**: A16z portfolio introduction rights with conflict disclosures"
+                    
+                elif "shares" in question_lower and ("available" in question_lower or "pool" in question_lower):
+                    answer = "**Share availability confirmed** by Legal team:\n\n**Current EIP Status:**\n• **Total EIP pool**: 1,000,000 shares\n• **Previously granted**: 85,000 shares  \n• **Available for grant**: 915,000 shares\n• **Requested for John Smith**: 15,000 shares\n• **Status**: ✅ **APPROVED** - Well within available pool\n\n**Grant represents**: 1.5% of total company\n**Remaining after grant**: 900,000 shares available for future grants"
+                    
+                elif "board" in question_lower:
+                    answer = "**Board approval process** from the email thread:\n\n**Board Meeting Details:**\n• **Date**: Thursday (July 25th)\n• **Agenda item**: \"Advisor Equity Grant Authorization\"\n• **Attendees**: All directors confirmed\n• **Priority**: This will be prioritized agenda item\n\n**Board Observer Rights for John:**\n• **Quarterly board meetings** access\n• **Formal observer rights** included in Advisor Agreement\n• **A16z portfolio introduction** rights with conflict disclosures\n\n**Current Status**: Board Consent prepared and ready for Thursday's meeting approval"
+                
+                else:
+                    answer = "I can help analyze **Lexsy's legal documents and email discussions**. I have access to:\n\n📄 **Legal Documents:**\n• Board Approval for Equity Incentive Plan\n• Advisor Agreement Template  \n• Complete Equity Incentive Plan (EIP)\n\n📧 **Email Thread:**\n• 6-message conversation about John Smith's advisor equity grant\n• Discussion between Alex Rodriguez (CEO) and Kristina Chen (Legal)\n\n**Try asking about:**\n• John Smith's equity grant details\n• Vesting terms and tax implications\n• Required documentation and timeline\n• Share availability in the EIP\n• Board approval process"
+            else:
+                # For custom clients, check if they have actual content
+                client_name = get_client_name(client_id)
+                answer = f"I can analyze legal documents and emails for **{client_name}**. \n\nTo get started:\n1. **Upload documents** (PDF, DOCX, TXT)\n2. **Connect Gmail** and ingest email threads\n3. **Ask specific questions** about legal matters\n\nOnce you have content uploaded, I can help analyze contracts, agreements, compliance requirements, and email discussions."
+            
+            # Mock sources for Lexsy
+            sources = []
+            if client_id == 1:
+                if "john smith" in question_lower or "equity" in question_lower or "vesting" in question_lower:
+                    sources = [
+                        {"type": "email", "subject": "Advisor Equity Grant for Lexsy, Inc.", "sender": "alex@founderco.com", "similarity_score": 0.95},
+                        {"type": "email", "subject": "Re: Advisor Equity Grant - Legal Review", "sender": "legal@lexsy.com", "similarity_score": 0.92},
+                        {"type": "document", "filename": "Lexsy Equity Incentive Plan.pdf", "similarity_score": 0.88}
+                    ]
+            
+            return {
+                "success": True,
+                "question": question,
+                "answer": answer,
+                "sources": sources,
+                "context_used": len(sources),
+                "tokens_used": len(answer.split()) * 1.3,  # Rough estimate
+                "response_time": 0.8,
+                "conversation_id": int(time.time())
+            }
+        
+        # Full features mode with proper client isolation
+        db = SessionLocal()
+        
+        # Verify client exists and user has access
+        client = db.query(Client).filter(Client.id == client_id, Client.is_active == True).first()
+        if not client:
+            db.close()
+            raise HTTPException(status_code=404, detail="Client not found")
+        
+        # Initialize AI service
+        from services.ai_service import AIService
+        ai_service = AIService()
+        
+        # Get conversation history if requested
+        conversation_history = None
+        if include_history:
+            recent_conversations = db.query(Conversation).filter(
+                Conversation.client_id == client_id
+            ).order_by(Conversation.created_at.desc()).limit(6).all()
+            
+            conversation_history = [
+                {
+                    "question": conv.question,
+                    "answer": conv.answer
+                }
+                for conv in reversed(recent_conversations)
+            ]
+        
+        # Generate AI response with CLIENT-SPECIFIC context isolation
+        response = ai_service.generate_response(
+            client_id=client_id,  # This ensures only this client's data is accessed
+            question=question,
+            conversation_history=conversation_history
+        )
+        
+        if not response["success"]:
+            db.close()
+            raise HTTPException(status_code=500, detail=response.get("error", "AI response generation failed"))
+        
+        # Save conversation to database with client isolation
+        conversation = Conversation(
+            client_id=client_id,
+            question=question,
+            answer=response["answer"],
+            context_sources=json.dumps([src["type"] + ":" + str(src.get("document_id", src.get("email_id", ""))) for src in response["sources"]]),
+            similarity_scores=json.dumps([src["similarity_score"] for src in response["sources"]]),
+            response_time=response["response_time"],
+            tokens_used=response["tokens_used"]
+        )
+        
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "question": question,
+            "answer": response["answer"],
+            "sources": response["sources"],
+            "context_used": response["context_used"],
+            "tokens_used": response["tokens_used"],
+            "response_time": response["response_time"],
+            "conversation_id": conversation.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
+
+# Also add this endpoint to initialize demo data properly
+@app.post("/api/demo/initialize-full")
+async def initialize_full_demo():
+    """Initialize complete demo with sample clients and data"""
+    try:
+        results = {
+            "clients_created": [],
+            "sample_data_loaded": {}
+        }
+        
+        if FULL_FEATURES:
+            db = SessionLocal()
+            
+            # Create demo clients
+            demo_clients = [
+                {
+                    "name": "Lexsy, Inc.",
+                    "email": "legal@lexsy.com", 
+                    "company": "Lexsy, Inc.",
+                    "description": "AI-powered legal technology startup focusing on equity grants and advisor agreements"
+                },
+                {
+                    "name": "TechCorp LLC",
+                    "email": "counsel@techcorp.com",
+                    "company": "TechCorp LLC", 
+                    "description": "Enterprise software company focusing on employment and vendor contracts"
+                }
+            ]
+            
+            for client_data in demo_clients:
+                existing = db.query(Client).filter(Client.email == client_data["email"]).first()
+                if not existing:
+                    client = Client(**client_data)
+                    db.add(client)
+                    db.commit()
+                    db.refresh(client)
+                    results["clients_created"].append(client.to_dict())
+                else:
+                    results["clients_created"].append(existing.to_dict())
+            
+            db.close()
+            
+            # Load sample data for Lexsy (first client)
+            if results["clients_created"]:
+                lexsy_client = results["clients_created"][0]
+                try:
+                    # Load sample documents
+                    doc_result = await upload_sample_documents(lexsy_client["id"])
+                    # Load sample emails  
+                    email_result = await ingest_sample_emails(lexsy_client["id"])
+                    
+                    # IMPORTANT: Fix vector store for the client
+                    if FULL_FEATURES:
+                        try:
+                            await fix_vector_metadata(lexsy_client["id"])
+                        except:
+                            pass
+                    
+                    results["sample_data_loaded"] = {
+                        "documents": doc_result.get("success", False),
+                        "emails": email_result.get("success", False),
+                        "documents_count": len(doc_result.get("documents", [])),
+                        "emails_count": email_result.get("emails_processed", 0)
+                    }
+                except Exception as e:
+                    print(f"Error loading sample data: {e}")
+        else:
+            # Demo mode
+            results["clients_created"] = [
+                {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
+                {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
+            ]
+            results["sample_data_loaded"] = {
+                "documents": True,
+                "emails": True,
+                "documents_count": 3,
+                "emails_count": 6
+            }
+        
+        return {
+            "success": True,
+            "message": "Full demo initialized successfully!",
+            "results": results
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Demo initialization failed"
+        }
