@@ -1799,3 +1799,120 @@ async def test_openai_api():
             "error": str(e),
             "error_type": type(e).__name__
         }
+        # Add this to your main.py file
+
+@app.post("/api/debug/reprocess-all-client-documents/{client_id}")
+async def reprocess_all_client_documents(client_id: int):
+    """Reprocess all documents for a client to fix vector store issues"""
+    try:
+        if not FULL_FEATURES:
+            return {"error": "Full features not available"}
+        
+        db = SessionLocal()
+        
+        # Get all documents for this client
+        documents = db.query(Document).filter(Document.client_id == client_id).all()
+        
+        if not documents:
+            db.close()
+            return {"error": "No documents found for client"}
+        
+        # Initialize services
+        from services.vector_service import VectorService
+        vector_service = VectorService()
+        
+        results = []
+        
+        for document in documents:
+            result = {
+                "document_id": document.id,
+                "filename": document.original_filename,
+                "status": "processing"
+            }
+            
+            try:
+                # Delete existing vector chunks (if any)
+                vector_service.delete_document_chunks(client_id, document.id)
+                
+                # Clear chunk_ids in database
+                document.chunk_ids = None
+                document.processing_status = "processing"
+                db.commit()
+                
+                # Only process if we have extracted text
+                if document.extracted_text and len(document.extracted_text.strip()) > 0:
+                    # Add to vector store with fixed metadata
+                    chunk_ids = vector_service.add_document_to_vector_store(
+                        client_id=client_id,
+                        document_id=document.id,
+                        text=document.extracted_text,
+                        metadata={
+                            "filename": document.original_filename,
+                            "file_type": document.file_type,
+                            "created_at": document.created_at.isoformat() if document.created_at else datetime.now().isoformat()
+                        }
+                    )
+                    
+                    if chunk_ids:
+                        document.chunk_ids = json.dumps(chunk_ids)
+                        document.processing_status = "completed"
+                        result["status"] = "success"
+                        result["chunks_created"] = len(chunk_ids)
+                    else:
+                        document.processing_status = "failed"
+                        result["status"] = "failed"
+                        result["error"] = "Failed to create vector chunks"
+                else:
+                    document.processing_status = "failed"
+                    result["status"] = "failed"
+                    result["error"] = "No extracted text available"
+                
+                db.commit()
+                
+            except Exception as e:
+                document.processing_status = "failed"
+                db.commit()
+                result["status"] = "error"
+                result["error"] = str(e)
+            
+            results.append(result)
+        
+        db.close()
+        
+        success_count = len([r for r in results if r["status"] == "success"])
+        
+        return {
+            "success": True,
+            "total_documents": len(documents),
+            "successful_reprocessed": success_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/debug/fix-vector-metadata/{client_id}")
+async def fix_vector_metadata(client_id: int):
+    """Fix vector store metadata format issues"""
+    try:
+        if not FULL_FEATURES:
+            return {"error": "Full features not available"}
+        
+        from services.vector_service import VectorService
+        vector_service = VectorService()
+        
+        # Reset the entire vector store for this client
+        reset_success = vector_service.reset_client_data(client_id)
+        
+        if reset_success:
+            # Now reprocess all documents
+            reprocess_result = await reprocess_all_client_documents(client_id)
+            return {
+                "vector_reset": True,
+                "reprocess_result": reprocess_result
+            }
+        else:
+            return {"error": "Failed to reset vector data"}
+            
+    except Exception as e:
+        return {"error": str(e)}
