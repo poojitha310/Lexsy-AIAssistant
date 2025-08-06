@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Legal Assistant - Document & Email Analysis</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -14,23 +15,27 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: #f8fafc;
-            color: #1e293b;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: #1a202c;
             line-height: 1.6;
+            min-height: 100vh;
         }
 
         .header {
-            background: linear-gradient(135deg, #1e293b, #475569);
+            background: linear-gradient(135deg, #2d3748, #4a5568);
             color: white;
-            padding: 1rem 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.25rem 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
         .header-content {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 0 1rem;
+            padding: 0 2rem;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -41,180 +46,236 @@
             align-items: center;
             gap: 0.75rem;
             font-size: 1.5rem;
-            font-weight: 600;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        .logo i {
+            font-size: 1.75rem;
+            color: #81e6d9;
         }
 
         .user-info {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 1.5rem;
         }
 
         .user-avatar {
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 600;
+            font-size: 1rem;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .logout-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateY(-1px);
         }
 
         .auth-section {
             background: white;
-            border-radius: 8px;
-            padding: 2rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            max-width: 400px;
-            margin: 2rem auto;
+            border-radius: 16px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 450px;
+            margin: 4rem auto;
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
         .auth-header {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
         }
 
-        .auth-form {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
+        .auth-header h2 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+
+        .auth-header p {
+            color: #718096;
+            font-weight: 400;
         }
 
         .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
+            margin-bottom: 1.5rem;
         }
 
         .form-label {
-            font-weight: 500;
-            color: #374151;
+            display: block;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            letter-spacing: 0.025em;
         }
 
         .form-input {
-            padding: 0.75rem;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
             font-size: 1rem;
+            transition: all 0.2s;
+            background: #f7fafc;
         }
 
         .form-input:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 2rem 1rem;
+            padding: 2rem;
         }
 
         .main-grid {
             display: grid;
-            grid-template-columns: 320px 1fr;
+            grid-template-columns: 380px 1fr;
             gap: 2rem;
+            align-items: start;
         }
 
         .sidebar {
             background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            height: fit-content;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
             position: sticky;
-            top: 2rem;
+            top: 7rem;
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
         .section {
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .section:last-child {
+            margin-bottom: 0;
         }
 
         .section h3 {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
+            font-size: 1.125rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            color: #374151;
+            gap: 0.75rem;
+            color: #2d3748;
+            letter-spacing: -0.025em;
         }
 
         .btn {
             width: 100%;
-            padding: 0.75rem;
+            padding: 0.875rem 1.25rem;
             border: none;
-            border-radius: 6px;
-            font-weight: 500;
+            border-radius: 8px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.875rem;
+            letter-spacing: 0.025em;
         }
 
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
+            transform: none !important;
         }
 
         .btn-primary {
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
 
         .btn-primary:hover:not(:disabled) {
-            background: #2563eb;
-            transform: translateY(-1px);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
 
         .btn-secondary {
-            background: #f1f5f9;
-            color: #475569;
-            border: 1px solid #e2e8f0;
+            background: #f7fafc;
+            color: #4a5568;
+            border: 2px solid #e2e8f0;
         }
 
         .btn-secondary:hover:not(:disabled) {
-            background: #e2e8f0;
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            transform: translateY(-1px);
         }
 
         .btn-danger {
-            background: #dc2626;
+            background: linear-gradient(135deg, #fc8181 0%, #e53e3e 100%);
             color: white;
         }
 
         .btn-danger:hover:not(:disabled) {
-            background: #b91c1c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
         }
 
         .btn-gmail {
-            background: #4285f4;
+            background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
             color: white;
         }
 
         .btn-gmail:hover:not(:disabled) {
-            background: #3367d6;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
         }
 
         .upload-zone {
-            border: 2px dashed #cbd5e1;
-            border-radius: 6px;
-            padding: 2rem;
+            border: 3px dashed #cbd5e0;
+            border-radius: 12px;
+            padding: 2.5rem 1.5rem;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s;
-            background: #f8fafc;
+            background: #f7fafc;
             margin-bottom: 1rem;
         }
 
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: #3b82f6;
-            background: #eff6ff;
+        .upload-zone:hover:not(.disabled) {
+            border-color: #667eea;
+            background: #edf2f7;
             transform: translateY(-2px);
+        }
+
+        .upload-zone.dragover {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            transform: scale(1.02);
         }
 
         .upload-zone.disabled {
@@ -224,49 +285,65 @@
         }
 
         .upload-icon {
-            font-size: 2.5rem;
-            color: #3b82f6;
+            font-size: 3rem;
+            color: #667eea;
             margin-bottom: 1rem;
         }
 
         .main-content {
             background: white;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.08);
             overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
         .tab-nav {
             display: flex;
-            background: #f8fafc;
+            background: #f7fafc;
             border-bottom: 1px solid #e2e8f0;
         }
 
         .tab {
             flex: 1;
-            padding: 1rem;
+            padding: 1.25rem 1.5rem;
             background: none;
             border: none;
             cursor: pointer;
-            font-weight: 500;
-            color: #64748b;
+            font-weight: 600;
+            color: #718096;
             transition: all 0.2s;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            position: relative;
         }
 
         .tab.active {
             background: white;
-            color: #1e293b;
-            border-bottom: 3px solid #3b82f6;
+            color: #2d3748;
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .tab:hover:not(.active) {
+            background: #edf2f7;
+            color: #4a5568;
         }
 
         .tab-content {
-            padding: 2rem;
+            padding: 2.5rem;
             display: none;
-            min-height: 500px;
+            min-height: 600px;
         }
 
         .tab-content.active {
@@ -274,7 +351,7 @@
         }
 
         .chat-container {
-            height: 500px;
+            height: 600px;
             display: flex;
             flex-direction: column;
         }
@@ -282,22 +359,22 @@
         .chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 1rem;
-            background: #f8fafc;
-            border-radius: 6px;
-            margin-bottom: 1rem;
+            padding: 1.5rem;
+            background: #f7fafc;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
             border: 1px solid #e2e8f0;
         }
 
         .message {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
             display: flex;
-            gap: 0.75rem;
-            animation: fadeIn 0.3s ease;
+            gap: 1rem;
+            animation: fadeIn 0.4s ease;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
@@ -306,178 +383,233 @@
         }
 
         .message-avatar {
-            width: 32px;
-            height: 32px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.75rem;
-            font-weight: 600;
+            font-size: 0.875rem;
+            font-weight: 700;
             flex-shrink: 0;
         }
 
         .user .message-avatar {
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
 
         .assistant .message-avatar {
-            background: #1e293b;
+            background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
             color: white;
         }
 
         .message-content {
             flex: 1;
-            max-width: 80%;
+            max-width: 85%;
         }
 
         .message-bubble {
-            padding: 1rem 1.25rem;
-            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            border-radius: 16px;
             word-wrap: break-word;
-            line-height: 1.5;
+            line-height: 1.6;
+            font-size: 0.95rem;
         }
 
         .user .message-bubble {
-            background: #3b82f6;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-bottom-right-radius: 4px;
+            border-bottom-right-radius: 6px;
         }
 
         .assistant .message-bubble {
             background: white;
-            border: 1px solid #e2e8f0;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            border: 2px solid #e2e8f0;
+            border-bottom-left-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            color: #2d3748;
+        }
+
+        /* Markdown styling for AI responses */
+        .assistant .message-bubble h1,
+        .assistant .message-bubble h2,
+        .assistant .message-bubble h3,
+        .assistant .message-bubble h4 {
+            color: #2d3748;
+            font-weight: 700;
+            margin: 1rem 0 0.5rem 0;
+        }
+
+        .assistant .message-bubble h1 { font-size: 1.25rem; }
+        .assistant .message-bubble h2 { font-size: 1.125rem; }
+        .assistant .message-bubble h3 { font-size: 1rem; }
+
+        .assistant .message-bubble strong {
+            color: #667eea;
+            font-weight: 700;
+        }
+
+        .assistant .message-bubble ul,
+        .assistant .message-bubble ol {
+            margin: 0.75rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .assistant .message-bubble li {
+            margin: 0.25rem 0;
+        }
+
+        .assistant .message-bubble p {
+            margin: 0.75rem 0;
+        }
+
+        .assistant .message-bubble p:first-child {
+            margin-top: 0;
+        }
+
+        .assistant .message-bubble p:last-child {
+            margin-bottom: 0;
         }
 
         .message-sources {
-            margin-top: 0.75rem;
+            margin-top: 1rem;
             font-size: 0.8rem;
         }
 
         .source-tag {
             display: inline-block;
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
             margin-right: 0.5rem;
-            margin-bottom: 0.25rem;
-            color: #64748b;
+            margin-bottom: 0.5rem;
+            color: #667eea;
+            font-weight: 500;
         }
 
         .chat-input-container {
             display: flex;
-            gap: 0.75rem;
+            gap: 1rem;
             align-items: flex-end;
         }
 
         .chat-input {
             flex: 1;
-            padding: 0.75rem;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 0.9rem;
+            padding: 1rem 1.25rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 0.95rem;
             resize: none;
-            min-height: 44px;
-            max-height: 120px;
+            min-height: 50px;
+            max-height: 150px;
             font-family: inherit;
+            transition: all 0.2s;
         }
 
         .chat-input:focus {
             outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
         .send-btn {
-            padding: 0.75rem 1rem;
-            background: #3b82f6;
+            padding: 1rem 1.25rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 6px;
+            border-radius: 12px;
             cursor: pointer;
             transition: all 0.2s;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            font-weight: 600;
+            min-width: 100px;
         }
 
         .send-btn:hover:not(:disabled) {
-            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
 
         .send-btn:disabled {
-            background: #94a3b8;
+            background: #a0aec0;
             cursor: not-allowed;
+            transform: none;
         }
 
         .empty-state {
             text-align: center;
-            padding: 3rem 2rem;
+            padding: 4rem 2rem;
         }
 
         .empty-state i {
-            font-size: 3rem;
-            color: #cbd5e1;
-            margin-bottom: 1rem;
+            font-size: 4rem;
+            color: #cbd5e0;
+            margin-bottom: 1.5rem;
         }
 
         .empty-state h3 {
-            margin-bottom: 0.5rem;
-            color: #475569;
+            margin-bottom: 1rem;
+            color: #4a5568;
+            font-weight: 700;
         }
 
         .empty-state p {
-            color: #64748b;
-            margin-bottom: 1.5rem;
+            color: #718096;
+            margin-bottom: 2rem;
+            font-size: 1.05rem;
         }
 
         .content-list {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
-            max-height: 400px;
+            gap: 1.25rem;
+            max-height: 500px;
             overflow-y: auto;
         }
 
         .content-item {
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 1.5rem;
             transition: all 0.2s;
             background: white;
         }
 
         .content-item:hover {
-            border-color: #3b82f6;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
         }
 
         .content-title {
-            font-weight: 600;
-            color: #1e293b;
-            margin-bottom: 0.25rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
+            font-size: 1.05rem;
         }
 
         .content-meta {
             font-size: 0.875rem;
-            color: #64748b;
+            color: #718096;
+            font-weight: 500;
         }
 
         .alert {
-            padding: 0.75rem 1rem;
-            border-radius: 6px;
-            margin-bottom: 1rem;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
             animation: slideIn 0.3s ease;
+            font-weight: 500;
         }
 
         @keyframes slideIn {
@@ -486,29 +618,116 @@
         }
 
         .alert-success {
-            background: #dcfce7;
-            color: #166534;
-            border: 1px solid #bbf7d0;
+            background: #c6f6d5;
+            color: #22543d;
+            border: 1px solid #9ae6b4;
         }
 
         .alert-error {
-            background: #fef2f2;
-            color: #991b1b;
-            border: 1px solid #fecaca;
+            background: #fed7d7;
+            color: #742a2a;
+            border: 1px solid #fc8181;
         }
 
         .alert-info {
-            background: #eff6ff;
-            color: #1e40af;
-            border: 1px solid #bfdbfe;
+            background: #bee3f8;
+            color: #2a4365;
+            border: 1px solid #90cdf4;
+        }
+
+        .current-client {
+            background: linear-gradient(135deg, #e6fffa 0%, #b2f5ea 100%);
+            border: 2px solid #4fd1c7;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-top: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .client-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .client-actions .btn {
+            margin-bottom: 0;
+            font-size: 0.8rem;
+            padding: 0.6rem 1rem;
+        }
+
+        .suggestion-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .suggestion-btn {
+            background: #f7fafc;
+            border: 2px solid #e2e8f0;
+            color: #4a5568;
+            padding: 0.75rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .suggestion-btn:hover {
+            background: #edf2f7;
+            border-color: #667eea;
+            color: #667eea;
+            transform: translateY(-1px);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2.5rem;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+        }
+
+        .modal h3 {
+            margin-bottom: 1.5rem;
+            color: #2d3748;
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
         }
 
         .typing-indicator {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            color: #64748b;
+            gap: 0.75rem;
+            color: #718096;
             font-style: italic;
+            font-weight: 500;
         }
 
         .typing-dots {
@@ -520,7 +739,7 @@
             width: 6px;
             height: 6px;
             border-radius: 50%;
-            background: #64748b;
+            background: #718096;
             animation: typing 1.4s infinite ease-in-out;
         }
 
@@ -532,130 +751,6 @@
             40% { transform: scale(1); opacity: 1; }
         }
 
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-        }
-
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 2rem;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 400px;
-        }
-
-        .client-selector {
-            position: relative;
-        }
-
-        .current-client {
-            background: #f0f9ff;
-            border: 1px solid #0ea5e9;
-            border-radius: 6px;
-            padding: 0.75rem;
-            margin-top: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .client-actions {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-        }
-
-        .client-actions .btn {
-            margin-bottom: 0;
-            font-size: 0.8rem;
-            padding: 0.5rem;
-        }
-
-        .monitoring-panel {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 1rem;
-            margin-top: 1rem;
-        }
-
-        .monitoring-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: #1e293b;
-        }
-
-        .monitoring-status {
-            font-size: 0.875rem;
-            color: #64748b;
-        }
-
-        .thread-selector {
-            margin-top: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .suggestion-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .suggestion-btn {
-            background: #f1f5f9;
-            border: 1px solid #e2e8f0;
-            color: #374151;
-            padding: 0.5rem 0.75rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-
-        .suggestion-btn:hover {
-            background: #e2e8f0;
-            border-color: #3b82f6;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin-bottom: 1rem;
-        }
-
-        .stat-card {
-            background: #f8fafc;
-            padding: 1rem;
-            border-radius: 6px;
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #1e293b;
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: #64748b;
-        }
-
         @media (max-width: 768px) {
             .main-grid {
                 grid-template-columns: 1fr;
@@ -664,6 +759,11 @@
 
             .sidebar {
                 position: static;
+                order: 2;
+            }
+
+            .main-content {
+                order: 1;
             }
 
             .container {
@@ -671,12 +771,50 @@
             }
 
             .chat-container {
-                height: 400px;
+                height: 500px;
             }
 
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+            .header-content {
+                padding: 0 1rem;
             }
+
+            .auth-section {
+                margin: 2rem auto;
+                padding: 2rem;
+            }
+        }
+
+        /* Status indicators */
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 0.5rem;
+        }
+
+        .status-ready { background: #48bb78; }
+        .status-processing { background: #ed8936; }
+        .status-failed { background: #f56565; }
+
+        /* Loading states */
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 50%;
+            border-top-color: #667eea;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
@@ -691,8 +829,8 @@
             <div class="user-info" id="userInfo" style="display: none;">
                 <span id="userNameDisplay">User</span>
                 <div class="user-avatar" id="userAvatar">U</div>
-                <button onclick="logout()" style="background: none; border: 1px solid rgba(255,255,255,0.3); color: white; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;">
-                    Logout
+                <button onclick="logout()" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
                 </button>
             </div>
         </div>
@@ -702,24 +840,24 @@
     <div id="authSection" class="auth-section">
         <div class="auth-header">
             <h2>Welcome to AI Legal Assistant</h2>
-            <p style="color: #6b7280; margin-top: 0.5rem;">Sign in to analyze documents and emails</p>
+            <p>Professional document and email analysis platform</p>
         </div>
         <form class="auth-form" onsubmit="handleAuth(event)">
             <div class="form-group">
-                <label class="form-label">Name</label>
-                <input type="text" class="form-input" id="userName" placeholder="Your name" required>
+                <label class="form-label">Full Name</label>
+                <input type="text" class="form-input" id="userName" placeholder="Enter your full name" required>
             </div>
             <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-input" id="userEmail" placeholder="your@email.com" required>
+                <label class="form-label">Email Address</label>
+                <input type="email" class="form-input" id="userEmail" placeholder="your@company.com" required>
             </div>
             <div class="form-group">
                 <label class="form-label">Organization</label>
-                <input type="text" class="form-input" id="userOrg" placeholder="Law firm or company" required>
+                <input type="text" class="form-input" id="userOrg" placeholder="Law firm or company name" required>
             </div>
             <button type="submit" class="btn btn-primary">
                 <i class="fas fa-sign-in-alt"></i>
-                Start Analysis
+                Access Platform
             </button>
         </form>
     </div>
@@ -739,14 +877,14 @@
                         </select>
                         
                         <div id="currentClient" class="current-client" style="display: none;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                <div style="flex: 1;">
                                     <strong id="currentClientName">Client Name</strong>
-                                    <div style="font-size: 0.75rem; color: #64748b;" id="currentClientStats">
+                                    <div style="font-size: 0.75rem; color: #4a5568; margin-top: 0.25rem;" id="currentClientStats">
                                         Loading stats...
                                     </div>
                                 </div>
-                                <div style="display: flex; gap: 0.25rem;">
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
                                     <span id="docsIndicator" title="Has Documents" style="display: none;">📄</span>
                                     <span id="emailsIndicator" title="Has Emails" style="display: none;">📧</span>
                                 </div>
@@ -759,12 +897,12 @@
                                 </button>
                                 <button class="btn btn-danger" onclick="deleteCurrentClient()" id="deleteClientBtn">
                                     <i class="fas fa-trash"></i>
-                                    Delete
+                                    Delete Client
                                 </button>
                             </div>
                         </div>
                         
-                        <button class="btn btn-secondary" onclick="showAddClientModal()" style="margin-top: 0.5rem;">
+                        <button class="btn btn-secondary" onclick="showAddClientModal()" style="margin-top: 1rem;">
                             <i class="fas fa-plus"></i>
                             Add New Client
                         </button>
@@ -773,14 +911,14 @@
 
                 <!-- Document Upload -->
                 <div class="section">
-                    <h3><i class="fas fa-upload"></i> Upload Documents</h3>
+                    <h3><i class="fas fa-cloud-upload-alt"></i> Upload Documents</h3>
                     <div class="upload-zone" id="uploadZone">
                         <div class="upload-icon">
                             <i class="fas fa-cloud-upload-alt"></i>
                         </div>
-                        <div style="font-weight: 500; margin-bottom: 0.25rem;">Drop files here</div>
-                        <div style="font-size: 0.875rem; color: #64748b;">PDF, DOCX, TXT • Max 10MB</div>
-                        <div style="font-size: 0.75rem; color: #ef4444; margin-top: 0.5rem;" id="uploadNote">
+                        <div style="font-weight: 600; margin-bottom: 0.5rem; color: #4a5568;">Drop files here or click to browse</div>
+                        <div style="font-size: 0.875rem; color: #718096;">PDF, DOCX, TXT • Max 10MB</div>
+                        <div style="font-size: 0.75rem; margin-top: 0.75rem; font-weight: 600;" id="uploadNote">
                             Select a client first
                         </div>
                         <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.txt" style="display: none;">
@@ -794,41 +932,14 @@
                         <i class="fab fa-google"></i>
                         Connect Gmail
                     </button>
-                    <div id="gmailStatus" style="display: none; margin-top: 0.5rem; font-size: 0.875rem; color: #059669;">
-                        <i class="fas fa-check-circle"></i> Gmail connected (Demo)
-                    </div>
-
-                    <!-- Thread Monitoring Panel -->
-                    <div id="monitoringPanel" class="monitoring-panel" style="display: none;">
-                        <div class="monitoring-header">
-                            <i class="fas fa-radar"></i>
-                            Thread Monitoring
-                        </div>
-                        
-                        <div class="thread-selector">
-                            <label class="form-label">Monitor Thread:</label>
-                            <select id="threadSelector" class="form-input">
-                                <option value="mock_thread_equity_001">Advisor Equity Grant (6 messages)</option>
-                                <option value="mock_thread_contract_002">Enterprise Contract (2 messages)</option>
-                            </select>
-                        </div>
-
-                        <button class="btn btn-secondary" onclick="startThreadMonitoring()" id="startMonitorBtn">
-                            <i class="fas fa-play"></i>
-                            Start Monitoring
-                        </button>
-                        
-                        <div id="monitoringStatus" class="monitoring-status" style="display: none;">
-                            <strong>Status:</strong> <span id="monitoringStatusText">Inactive</span><br>
-                            <strong>Last Check:</strong> <span id="lastCheckTime">Never</span><br>
-                            <strong>Messages Found:</strong> <span id="messagesFound">0</span>
-                        </div>
+                    <div id="gmailStatus" style="display: none; margin-top: 1rem; padding: 0.75rem; background: #c6f6d5; border: 1px solid #9ae6b4; border-radius: 8px; font-size: 0.875rem; color: #22543d; font-weight: 500;">
+                        <i class="fas fa-check-circle"></i> Gmail Connected (Demo Mode)
                     </div>
                 </div>
 
                 <!-- Quick Actions -->
                 <div class="section">
-                    <h3><i class="fas fa-rocket"></i> Quick Actions</h3>
+                    <h3><i class="fas fa-magic"></i> Quick Actions</h3>
                     <button class="btn btn-primary" onclick="initializeFullDemo()" id="demoSetupBtn">
                         <i class="fas fa-magic"></i>
                         Initialize Demo
@@ -862,9 +973,14 @@
                                 <div class="message-avatar">AI</div>
                                 <div class="message-content">
                                     <div class="message-bubble">
-                                        👋 Hello! I'm your AI legal assistant. Select a client to get started, then I'll help you analyze their legal documents and email threads. 
-                                        <br><br>
-                                        Try the <strong>Initialize Demo</strong> button to load sample legal data, or create your own client and upload documents.
+                                        <p>👋 <strong>Welcome to AI Legal Assistant!</strong></p>
+                                        <p>I'm here to help you analyze legal documents and email communications. To get started:</p>
+                                        <ul>
+                                            <li><strong>Select a client</strong> from the sidebar</li>
+                                            <li><strong>Upload documents</strong> or <strong>connect Gmail</strong></li>
+                                            <li><strong>Ask questions</strong> about legal matters</li>
+                                        </ul>
+                                        <p>Try the <strong>Initialize Demo</strong> button to load sample legal data and see the platform in action!</p>
                                     </div>
                                 </div>
                             </div>
@@ -879,6 +995,7 @@
                             <textarea id="chatInput" class="chat-input" placeholder="Select a client first, then ask about their legal matters..." rows="1" disabled></textarea>
                             <button class="send-btn" onclick="sendMessage()" id="sendBtn" disabled>
                                 <i class="fas fa-paper-plane"></i>
+                                Send
                             </button>
                         </div>
                     </div>
@@ -890,6 +1007,10 @@
                         <i class="fas fa-file-alt"></i>
                         <h3>No Documents Yet</h3>
                         <p>Select a client and upload PDF, DOCX, or TXT files to start analysis</p>
+                        <button class="btn btn-primary" onclick="switchTab('chat')" style="max-width: 200px; margin: 0 auto;">
+                            <i class="fas fa-arrow-left"></i>
+                            Back to Chat
+                        </button>
                     </div>
                 </div>
 
@@ -898,7 +1019,17 @@
                     <div id="emailsContent" class="empty-state">
                         <i class="fas fa-envelope"></i>
                         <h3>No Email Threads</h3>
-                        <p>Select a client and connect Gmail to analyze email threads</p>
+                        <p>Select a client and connect Gmail to analyze email communications</p>
+                        <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+                            <button class="btn btn-gmail" onclick="connectGmail()">
+                                <i class="fab fa-google"></i>
+                                Connect Gmail
+                            </button>
+                            <button class="btn btn-secondary" onclick="switchTab('chat')">
+                                <i class="fas fa-arrow-left"></i>
+                                Back to Chat
+                            </button>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -908,27 +1039,33 @@
     <!-- Add Client Modal -->
     <div id="addClientModal" class="modal">
         <div class="modal-content">
-            <h3 style="margin-bottom: 1rem;">Add New Client</h3>
+            <h3>Add New Client</h3>
             <form id="addClientForm" onsubmit="addNewClient(event)">
                 <div class="form-group">
                     <label class="form-label">Client Name</label>
-                    <input type="text" class="form-input" id="newClientName" required>
+                    <input type="text" class="form-input" id="newClientName" placeholder="e.g., John Doe" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Email</label>
-                    <input type="email" class="form-input" id="newClientEmail" required>
+                    <label class="form-label">Email Address</label>
+                    <input type="email" class="form-input" id="newClientEmail" placeholder="client@company.com" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Company</label>
-                    <input type="text" class="form-input" id="newClientCompany" required>
+                    <label class="form-label">Company/Organization</label>
+                    <input type="text" class="form-input" id="newClientCompany" placeholder="Company Name LLC" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-input" id="newClientDescription" rows="3"></textarea>
+                    <label class="form-label">Description (Optional)</label>
+                    <textarea class="form-input" id="newClientDescription" rows="3" placeholder="Brief description of legal matters..."></textarea>
                 </div>
-                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">Add Client</button>
-                    <button type="button" class="btn btn-secondary" onclick="hideAddClientModal()" style="flex: 1;">Cancel</button>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="fas fa-plus"></i>
+                        Add Client
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="hideAddClientModal()" style="flex: 1;">
+                        <i class="fas fa-times"></i>
+                        Cancel
+                    </button>
                 </div>
             </form>
         </div>
@@ -940,9 +1077,14 @@
         let isAuthenticated = false;
         let currentClientId = null;
         let availableClients = [];
-        let monitoringActive = false;
-        let monitoringInterval = null;
         const API_BASE = window.location.origin;
+
+        // Markdown renderer configuration
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            sanitize: false
+        });
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
@@ -999,11 +1141,6 @@
             currentClientId = null;
             availableClients = [];
             
-            if (monitoringInterval) {
-                clearInterval(monitoringInterval);
-                monitoringActive = false;
-            }
-            
             document.getElementById('authSection').style.display = 'block';
             document.getElementById('mainApp').style.display = 'none';
             document.getElementById('userInfo').style.display = 'none';
@@ -1041,7 +1178,7 @@
 
                 chatInput.addEventListener('input', function() {
                     this.style.height = 'auto';
-                    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+                    this.style.height = Math.min(this.scrollHeight, 150) + 'px';
                 });
             }
 
@@ -1053,7 +1190,8 @@
                 }
             });
         }
-                // ===== CLIENT MANAGEMENT FUNCTIONS =====
+
+        // ===== CLIENT MANAGEMENT FUNCTIONS =====
         
         async function loadClients() {
             try {
@@ -1108,6 +1246,7 @@
                 }
                 updateUploadZone();
                 updateChatPlaceholder();
+                clearChat();
                 return;
             }
             
@@ -1152,8 +1291,10 @@
                     updateUploadZone();
                     updateChatPlaceholder();
                     loadSuggestedQuestions();
+                    clearChat();
                     
-                    addMessage('assistant', `🔄 Switched to client: **${client.name}**. You can now ask questions about their documents and emails, or load sample data to get started.`);
+                    // Add client switch message
+                    addMessage('assistant', `🔄 **Switched to client: ${client.name}**\n\nYou can now ask questions about their documents and emails, or load sample data to get started.`);
                     
                 } else {
                     showAlert('Failed to get client details', 'error');
@@ -1161,6 +1302,13 @@
             } catch (error) {
                 showAlert('Failed to switch client', 'error');
                 console.error('Switch client error:', error);
+            }
+        }
+
+        function clearChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            if (chatMessages) {
+                chatMessages.innerHTML = '';
             }
         }
 
@@ -1249,6 +1397,7 @@
                         await loadClients();
                         updateUploadZone();
                         updateChatPlaceholder();
+                        clearChat();
                         
                     } else {
                         showAlert(`Failed to delete client: ${data.error}`, 'error');
@@ -1259,7 +1408,8 @@
                 }
             }
         }
-                // ===== CHAT AND MESSAGING FUNCTIONS =====
+
+        // ===== CHAT AND MESSAGING FUNCTIONS =====
         
         async function sendMessage() {
             if (!isAuthenticated || !currentClientId) {
@@ -1286,7 +1436,7 @@
             const sendBtn = document.getElementById('sendBtn');
             const originalContent = sendBtn.innerHTML;
             sendBtn.disabled = true;
-            sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            sendBtn.innerHTML = '<div class="spinner"></div>';
             
             try {
                 const formData = new FormData();
@@ -1330,8 +1480,8 @@
             
             let sourcesHtml = '';
             if (sources && sources.length > 0) {
-                sourcesHtml = '<div class="message-sources" style="margin-top: 0.75rem; font-size: 0.8rem;">';
-                sourcesHtml += '<strong>Sources:</strong><br>';
+                sourcesHtml = '<div class="message-sources" style="margin-top: 1rem; font-size: 0.8rem;">';
+                sourcesHtml += '<strong style="color: #4a5568;">Sources:</strong><br>';
                 sources.forEach(source => {
                     const icon = source.type === 'document' ? 'fa-file-pdf' : 'fa-envelope';
                     const name = source.filename || source.subject || 'Source';
@@ -1344,10 +1494,17 @@
                 ? (currentUser?.name?.charAt(0)?.toUpperCase() || 'U')
                 : 'AI';
             
+            // Process content based on sender
+            let processedContent = content;
+            if (sender === 'assistant') {
+                // Use marked.js to render markdown
+                processedContent = marked.parse(content);
+            }
+            
             messageDiv.innerHTML = `
                 <div class="message-avatar">${avatarText}</div>
                 <div class="message-content">
-                    <div class="message-bubble">${content}</div>
+                    <div class="message-bubble">${processedContent}</div>
                     ${sourcesHtml}
                 </div>
             `;
@@ -1369,7 +1526,7 @@
                 <div class="message-content">
                     <div class="message-bubble">
                         <div class="typing-indicator">
-                            <span>Analyzing</span>
+                            <span>Analyzing documents...</span>
                             <div class="typing-dots">
                                 <div class="typing-dot"></div>
                                 <div class="typing-dot"></div>
@@ -1434,7 +1591,8 @@
             
             suggestionsContainer.style.display = suggestions.length > 0 ? 'flex' : 'none';
         }
-                // ===== FILE UPLOAD FUNCTIONS =====
+
+        // ===== FILE UPLOAD FUNCTIONS =====
         
         function handleDragOver(e) {
             e.preventDefault();
@@ -1533,7 +1691,7 @@
                     await switchClient();
 
                     const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
-                    addMessage('assistant', `📄 I've analyzed "${file.name}" for ${clientName}. You can now ask questions about its contents!`);
+                    addMessage('assistant', `📄 **Document Processed Successfully!**\n\nI've analyzed "${file.name}" for ${clientName}. You can now ask questions about its contents!`);
 
                 } else {
                     showAlert(`Upload failed: ${result.error}`, 'error');
@@ -1577,7 +1735,7 @@
                     await switchClient();
                     
                     const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
-                    addMessage('assistant', `📊 Sample data loaded for ${clientName}! You can now ask questions about the Lexsy advisor equity grant discussion and legal documents.`);
+                    addMessage('assistant', `📊 **Sample Data Loaded for ${clientName}!**\n\n✅ ${docData.documents?.length || 0} legal documents processed\n✅ ${emailData.emails_processed || 0} email communications analyzed\n\nYou can now ask questions about the Lexsy advisor equity grant discussion and legal documents!`);
                     
                 } else {
                     showAlert('Failed to load some sample data', 'error');
@@ -1587,646 +1745,3 @@
                 showAlert('Error loading sample data', 'error');
                 console.error('Load sample data error:', error);
             }
-        }
-                // ===== DEMO AND UTILITY FUNCTIONS =====
-        
-        async function initializeFullDemo() {
-            try {
-                showAlert('Initializing full demo with sample legal data...', 'info');
-                
-                const response = await fetch(`${API_BASE}/api/demo/initialize-full`, {
-                    method: 'POST',
-                    headers: {
-                        'X-User-Email': currentUser?.email || 'demo@example.com',
-                        'X-User-Name': currentUser?.name || 'Demo User'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showAlert('✅ Full demo initialized! Sample clients and data are ready.', 'success');
-                    
-                    await loadClients(); 
-                    
-                    const gmailStatus = document.getElementById('gmailStatus');
-                    const gmailBtn = document.getElementById('gmailBtn');
-                    const monitoringPanel = document.getElementById('monitoringPanel');
-                    
-                    if (gmailStatus) gmailStatus.style.display = 'block';
-                    if (gmailBtn) gmailBtn.innerHTML = '<i class="fas fa-check"></i> Gmail Connected (Demo)';
-                    if (monitoringPanel) monitoringPanel.style.display = 'block';
-                    
-                    addMessage('assistant', `🎉 **Demo Environment Ready!**
-
-I've set up sample legal data including:
-• **Lexsy, Inc.** with advisor equity grant discussion (6 emails)
-• **TechCorp LLC** for comparison (empty - you can add data)
-• Legal documents: Board approvals, advisor agreements, equity plans
-• Gmail monitoring capabilities
-
-**Try asking questions like:**
-• "What equity grant was proposed for John Smith?"
-• "What are the vesting terms discussed in emails?"
-• "How many shares are available in our equity incentive plan?"
-• "What documentation is needed for the advisor agreement?"
-
-Select **Lexsy, Inc.** from the client dropdown to get started!`);
-                            
-                } else {
-                    showAlert('Demo initialization failed. Please try again.', 'error');
-                }
-
-            } catch (error) {
-                showAlert('Demo initialization failed. Please try again.', 'error');
-                console.error('Demo initialization error:', error);
-            }
-        }
-
-        function updateUploadZone() {
-            const uploadZone = document.getElementById('uploadZone');
-            const uploadNote = document.getElementById('uploadNote');
-            
-            if (!uploadZone || !uploadNote) return;
-            
-            if (currentClientId) {
-                uploadZone.classList.remove('disabled');
-                uploadNote.textContent = 'Ready to upload files';
-                uploadNote.style.color = '#059669';
-            } else {
-                uploadZone.classList.add('disabled');
-                uploadNote.textContent = 'Select a client first';
-                uploadNote.style.color = '#ef4444';
-            }
-        }
-
-        function updateChatPlaceholder() {
-            const chatInput = document.getElementById('chatInput');
-            const sendBtn = document.getElementById('sendBtn');
-            
-            if (!chatInput || !sendBtn) return;
-            
-            if (currentClientId) {
-                const client = availableClients.find(c => c.id === currentClientId);
-                chatInput.placeholder = `Ask questions about ${client?.name || 'this client'}'s legal matters...`;
-                chatInput.disabled = false;
-                sendBtn.disabled = false;
-            } else {
-                chatInput.placeholder = 'Select a client first, then ask about their legal matters...';
-                chatInput.disabled = true;
-                sendBtn.disabled = true;
-            }
-        }
-
-        function resetAppState() {
-            const selector = document.getElementById('clientSelector');
-            if (selector) {
-                selector.innerHTML = '<option value="">Select Client...</option>';
-            }
-            const currentClient = document.getElementById('currentClient');
-            if (currentClient) {
-                currentClient.style.display = 'none';
-            }
-            
-            updateUploadZone();
-            resetTabContents();
-            resetChat();
-            resetGmailStatus();
-        }
-
-        function resetChat() {
-            const chatMessages = document.getElementById('chatMessages');
-            if (chatMessages) {
-                chatMessages.innerHTML = `
-                    <div class="message assistant">
-                        <div class="message-avatar">AI</div>
-                        <div class="message-content">
-                            <div class="message-bubble">
-                                👋 Hello! I'm your AI legal assistant. Select a client to get started, then I'll help you analyze their legal documents and email threads.
-                                <br><br>
-                                Try the <strong>Initialize Demo</strong> button to load sample legal data, or create your own client and upload documents.
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            const suggestedQuestions = document.getElementById('suggestedQuestions');
-            if (suggestedQuestions) {
-                suggestedQuestions.style.display = 'none';
-            }
-        }
-
-        function resetTabContents() {
-            const documentsContent = document.getElementById('documentsContent');
-            const emailsContent = document.getElementById('emailsContent');
-            
-            if (documentsContent) {
-                documentsContent.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-file-alt"></i>
-                        <h3>No Documents Yet</h3>
-                        <p>Select a client and upload PDF, DOCX, or TXT files to start analysis</p>
-                    </div>
-                `;
-            }
-            
-            if (emailsContent) {
-                emailsContent.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-envelope"></i>
-                        <h3>No Email Threads</h3>
-                        <p>Select a client and connect Gmail to analyze email threads</p>
-                    </div>
-                `;
-            }
-        }
-
-        function resetGmailStatus() {
-            const gmailStatus = document.getElementById('gmailStatus');
-            const gmailBtn = document.getElementById('gmailBtn');
-            const monitoringPanel = document.getElementById('monitoringPanel');
-            
-            if (gmailStatus) gmailStatus.style.display = 'none';
-            if (gmailBtn) gmailBtn.innerHTML = '<i class="fab fa-google"></i> Connect Gmail';
-            if (monitoringPanel) monitoringPanel.style.display = 'none';
-            
-            if (monitoringInterval) {
-                clearInterval(monitoringInterval);
-                monitoringActive = false;
-            }
-        }
-
-        function showAlert(message, type = 'info') {
-            const existingAlerts = document.querySelectorAll('.alert');
-            existingAlerts.forEach(alert => alert.remove());
-
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            
-            const icon = type === 'success' ? 'fa-check-circle' : 
-                        type === 'error' ? 'fa-exclamation-circle' : 
-                        'fa-info-circle';
-            
-            alertDiv.innerHTML = `
-                <i class="fas ${icon}"></i>
-                <span>${message}</span>
-            `;
-
-            const container = document.querySelector('.container') || document.body;
-            container.insertBefore(alertDiv, container.firstChild);
-
-            setTimeout(() => {
-                if (alertDiv.parentNode) {
-                    alertDiv.remove();
-                }
-            }, 5000);
-        }
-
-        function clearAllData() {
-            if (confirm('Are you sure you want to clear all client data? This action cannot be undone.')) {
-                const userKey = localStorage.getItem('aiAssistantUser');
-                localStorage.clear();
-                if (userKey) {
-                    localStorage.setItem('aiAssistantUser', userKey);
-                }
-
-                currentClientId = null;
-                availableClients = [];
-                
-                if (monitoringInterval) {
-                    clearInterval(monitoringInterval);
-                    monitoringActive = false;
-                }
-
-                resetAppState();
-                showAlert('All data cleared successfully', 'success');
-                
-                addMessage('assistant', '🔄 All client data has been cleared. You can now create new clients or initialize the demo again.');
-            }
-        }
-                // ===== TAB MANAGEMENT AND CONTENT LOADING =====
-        
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-
-            const tabContent = document.getElementById(tabName + 'Tab');
-            if (tabContent) {
-                tabContent.classList.add('active');
-            }
-            
-            const tabs = document.querySelectorAll('.tab');
-            tabs.forEach(tab => {
-                if (tab.textContent.toLowerCase().includes(tabName.toLowerCase())) {
-                    tab.classList.add('active');
-                }
-            });
-
-            if (tabName === 'documents') {
-                loadDocuments();
-            } else if (tabName === 'emails') {
-                loadEmails();
-            }
-        }
-
-        async function loadDocuments() {
-            const content = document.getElementById('documentsContent');
-            if (!content) return;
-            
-            if (!isAuthenticated) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-lock"></i>
-                        <h3>Sign In Required</h3>
-                        <p>Please sign in to view documents</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            if (!currentClientId) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-users"></i>
-                        <h3>Select a Client</h3>
-                        <p>Please select a client to view their documents</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/documents/${currentClientId}/documents`, {
-                    headers: {
-                        'X-User-Email': currentUser?.email || 'demo@example.com',
-                        'X-User-Name': currentUser?.name || 'Demo User'
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.documents && data.documents.length > 0) {
-                    content.innerHTML = `
-                        <div style="margin-bottom: 1rem;">
-                            <h4>Documents for ${data.client_name || 'Client'}</h4>
-                            <p style="color: #64748b; font-size: 0.9rem;">Total: ${data.total_documents} documents</p>
-                        </div>
-                        <div class="content-list">
-                            ${data.documents.map(doc => `
-                                <div class="content-item">
-                                    <div class="content-title">
-                                        <i class="fas fa-file-${doc.file_type === 'pdf' ? 'pdf' : doc.file_type === 'docx' ? 'word' : 'alt'}"></i>
-                                        ${doc.original_filename || doc.filename}
-                                        <span style="margin-left: auto; font-size: 0.8rem; color: ${doc.processing_status === 'completed' ? '#059669' : '#d97706'};">
-                                            ${doc.processing_status === 'completed' ? '✅ Ready' : '⏳ Processing'}
-                                        </span>
-                                    </div>
-                                    <div class="content-meta">
-                                        ${doc.file_type ? doc.file_type.toUpperCase() : 'DOC'} • ${Math.round((doc.file_size || 0) / 1024)} KB • ${doc.created_at ? new Date(doc.created_at).toLocaleDateString() : 'Unknown date'}
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                } else {
-                    const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fas fa-file-alt"></i>
-                            <h3>No Documents Yet</h3>
-                            <p>Upload PDF, DOCX, or TXT files for ${clientName}</p>
-                            <button class="btn btn-primary" onclick="loadClientSampleData()" style="margin-top: 1rem;">
-                                <i class="fas fa-database"></i>
-                                Load Sample Documents
-                            </button>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Error Loading Documents</h3>
-                        <p>Please try again</p>
-                    </div>
-                `;
-                console.error('Load documents error:', error);
-            }
-        }
-
-        async function loadEmails() {
-            const content = document.getElementById('emailsContent');
-            if (!content) return;
-            
-            if (!isAuthenticated) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-lock"></i>
-                        <h3>Sign In Required</h3>
-                        <p>Please sign in to view email threads</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            if (!currentClientId) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-users"></i>
-                        <h3>Select a Client</h3>
-                        <p>Please select a client to view their email threads</p>
-                    </div>
-                `;
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/api/emails/${currentClientId}/emails`, {
-                    headers: {
-                        'X-User-Email': currentUser?.email || 'demo@example.com',
-                        'X-User-Name': currentUser?.name || 'Demo User'
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.emails && data.emails.length > 0) {
-                    const threads = {};
-                    data.emails.forEach(email => {
-                        const threadId = email.thread_id || email.gmail_thread_id || 'default';
-                        if (!threads[threadId]) {
-                            threads[threadId] = [];
-                        }
-                        threads[threadId].push(email);
-                    });
-
-                    let threadsHtml = `
-                        <div style="margin-bottom: 1rem;">
-                            <h4>Email Threads for ${data.client_name || 'Client'}</h4>
-                            <p style="color: #64748b; font-size: 0.9rem;">Total: ${data.total_emails} emails in ${Object.keys(threads).length} threads</p>
-                        </div>
-                    `;
-                    
-                    Object.entries(threads).forEach(([threadId, emails]) => {
-                        const firstEmail = emails[0];
-                        
-                        threadsHtml += `
-                            <div class="content-item">
-                                <div class="content-title">
-                                    <i class="fas fa-envelope"></i>
-                                    ${firstEmail.subject || 'No Subject'}
-                                    <span style="margin-left: auto; font-size: 0.8rem; color: #64748b;">
-                                        ${emails.length} message${emails.length !== 1 ? 's' : ''}
-                                    </span>
-                                </div>
-                                <div class="content-meta" style="margin-bottom: 0.5rem;">
-                                    <strong>Participants:</strong> ${[...new Set(emails.flatMap(e => [e.sender, e.recipient]).filter(Boolean))].join(', ')}
-                                </div>
-                                <div style="max-height: 200px; overflow-y: auto; background: #f8fafc; border-radius: 4px; padding: 0.5rem;">
-                                    ${emails.slice(0, 3).map(email => `
-                                        <div style="border-bottom: 1px solid #e2e8f0; padding: 0.5rem 0; margin-bottom: 0.5rem;">
-                                            <div style="font-weight: 600; font-size: 0.8rem; color: #374151;">
-                                                ${email.sender || 'Unknown'} 
-                                                <span style="font-weight: normal; color: #64748b;">
-                                                    • ${email.date_sent ? new Date(email.date_sent).toLocaleDateString() : 'Unknown date'}
-                                                </span>
-                                            </div>
-                                            <div style="font-size: 0.85rem; color: #374151; line-height: 1.4; margin-top: 0.25rem;">
-                                                ${(email.snippet || email.body || 'No content available').substring(0, 150)}${(email.snippet || email.body || '').length > 150 ? '...' : ''}
-                                            </div>
-                                        </div>
-                                    `).join('')}
-                                    ${emails.length > 3 ? `<div style="text-align: center; color: #64748b; font-size: 0.8rem;">... and ${emails.length - 3} more messages</div>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    content.innerHTML = `<div class="content-list">${threadsHtml}</div>`;
-                } else {
-                    const clientName = availableClients.find(c => c.id === currentClientId)?.name || 'this client';
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fas fa-envelope"></i>
-                            <h3>No Email Threads</h3>
-                            <p>Connect Gmail to start analyzing email threads for ${clientName}</p>
-                            <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
-                                <button class="btn btn-gmail" onclick="connectGmail()">
-                                    <i class="fab fa-google"></i>
-                                    Connect Gmail
-                                </button>
-                                <button class="btn btn-secondary" onclick="loadClientSampleData()">
-                                    <i class="fas fa-database"></i>
-                                    Load Sample Emails
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                content.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Error Loading Emails</h3>
-                        <p>Please try again or check your Gmail connection</p>
-                    </div>
-                `;
-                console.error('Load emails error:', error);
-            }
-        }
-                // ===== GMAIL INTEGRATION =====
-        
-        async function connectGmail() {
-            if (!isAuthenticated) {
-                showAlert('Please sign in first to connect Gmail', 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}/api/auth/gmail/auth-url`, {
-                    headers: {
-                        'X-User-Email': currentUser?.email || 'demo@example.com',
-                        'X-User-Name': currentUser?.name || 'Demo User'
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.success) {
-                    if (data.demo_mode || data.auth_url === "#demo") {
-                        const gmailStatus = document.getElementById('gmailStatus');
-                        const gmailBtn = document.getElementById('gmailBtn');
-                        const monitoringPanel = document.getElementById('monitoringPanel');
-                        
-                        if (gmailStatus) gmailStatus.style.display = 'block';
-                        if (gmailBtn) gmailBtn.innerHTML = '<i class="fas fa-check"></i> Gmail Connected (Demo)';
-                        if (monitoringPanel) monitoringPanel.style.display = 'block';
-                        
-                        showAlert('Gmail connected successfully (demo mode)!', 'success');
-                        
-                        addMessage('assistant', '📧 Gmail connected in demo mode! You can now monitor email threads and load sample email conversations for analysis.');
-                    } else {
-                        showAlert('Opening Gmail authentication...', 'info');
-                        
-                        const authWindow = window.open(
-                            data.auth_url, 
-                            'gmail_auth', 
-                            'width=500,height=600,scrollbars=yes,resizable=yes'
-                        );
-                        
-                        const messageHandler = function(event) {
-                            if (event.data.type === 'GMAIL_AUTH_SUCCESS') {
-                                const gmailStatus = document.getElementById('gmailStatus');
-                                const gmailBtn = document.getElementById('gmailBtn');
-                                const monitoringPanel = document.getElementById('monitoringPanel');
-                                
-                                if (gmailStatus) gmailStatus.style.display = 'block';
-                                if (gmailBtn) gmailBtn.innerHTML = '<i class="fas fa-check"></i> Gmail Connected';
-                                if (monitoringPanel) monitoringPanel.style.display = 'block';
-                                
-                                showAlert('Gmail connected successfully!', 'success');
-                                
-                                window.removeEventListener('message', messageHandler);
-                                
-                                const emailsTab = document.getElementById('emailsTab');
-                                if (emailsTab && emailsTab.classList.contains('active')) {
-                                    loadEmails();
-                                }
-                            }
-                        };
-                        
-                        window.addEventListener('message', messageHandler);
-                    }
-                } else {
-                    showAlert('Failed to get Gmail auth URL. Using demo mode.', 'error');
-                }
-            } catch (error) {
-                showAlert('Gmail connection error. Please try again.', 'error');
-                console.error('Gmail connection error:', error);
-            }
-        }
-
-        async function startThreadMonitoring() {
-            if (!isAuthenticated || !currentClientId) {
-                showAlert('Please sign in and select a client first', 'error');
-                return;
-            }
-
-            const threadSelector = document.getElementById('threadSelector');
-            if (!threadSelector) return;
-            
-            const selectedThread = threadSelector.value;
-            const threadText = threadSelector.options[threadSelector.selectedIndex].text;
-
-            try {
-                showAlert(`Starting monitoring for ${threadText}...`, 'info');
-                
-                const formData = new FormData();
-                formData.append('thread_id', selectedThread);
-                formData.append('check_interval', '300');
-                
-                const response = await fetch(`${API_BASE}/api/emails/${currentClientId}/start-thread-monitoring`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-User-Email': currentUser?.email || 'demo@example.com',
-                        'X-User-Name': currentUser?.name || 'Demo User'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    const monitoringStatus = document.getElementById('monitoringStatus');
-                    const monitoringStatusText = document.getElementById('monitoringStatusText');
-                    const startMonitorBtn = document.getElementById('startMonitorBtn');
-                    
-                    if (monitoringStatus) monitoringStatus.style.display = 'block';
-                    if (monitoringStatusText) monitoringStatusText.textContent = 'Active';
-                    if (startMonitorBtn) {
-                        startMonitorBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Monitoring';
-                        startMonitorBtn.onclick = stopThreadMonitoring;
-                    }
-                    
-                    monitoringActive = true;
-                    
-                    showAlert(`✅ Now monitoring ${threadText}! Checking every 5 minutes.`, 'success');
-                    
-                    addMessage('assistant', `📡 Gmail monitoring started for "${threadText}". I'll automatically detect and process new messages in this thread.`);
-                } else {
-                    showAlert('Failed to start monitoring. Please try again.', 'error');
-                }
-            } catch (error) {
-                showAlert('Error starting monitoring. Please try again.', 'error');
-                console.error('Start monitoring error:', error);
-            }
-        }
-
-        async function stopThreadMonitoring() {
-            try {
-                const threadSelector = document.getElementById('threadSelector');
-                if (!threadSelector) return;
-                
-                const selectedThread = threadSelector.value;
-                
-                const formData = new FormData();
-                formData.append('thread_id', selectedThread);
-                
-                const response = await fetch(`${API_BASE}/api/emails/stop-thread-monitoring`, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-User-Email': currentUser?.email || 'demo@example.com',
-                        'X-User-Name': currentUser?.name || 'Demo User'
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    const monitoringStatusText = document.getElementById('monitoringStatusText');
-                    const startMonitorBtn = document.getElementById('startMonitorBtn');
-                    
-                    if (monitoringStatusText) monitoringStatusText.textContent = 'Inactive';
-                    if (startMonitorBtn) {
-                        startMonitorBtn.innerHTML = '<i class="fas fa-play"></i> Start Monitoring';
-                        startMonitorBtn.onclick = startThreadMonitoring;
-                    }
-                    
-                    monitoringActive = false;
-                    if (monitoringInterval) {
-                        clearInterval(monitoringInterval);
-                    }
-                    
-                    showAlert('Monitoring stopped', 'success');
-                }
-            } catch (error) {
-                showAlert('Error stopping monitoring', 'error');
-                console.error('Stop monitoring error:', error);
-            }
-        }
-
-        // ===== MAKE FUNCTIONS GLOBAL =====
-        
-        window.handleAuth = handleAuth;
-        window.logout = logout;
-        window.sendMessage = sendMessage;
-        window.addNewClient = addNewClient;
-        window.switchClient = switchClient;
-        window.initializeFullDemo = initializeFullDemo;
-        window.uploadFile = uploadFile;
-        window.showAddClientModal = showAddClientModal;
-        window.hideAddClientModal = hideAddClientModal;
-        window.loadClientSampleData = loadClientSampleData;
-        window.deleteCurrentClient = deleteCurrentClient;
-        window.switchTab = switchTab;
-        window.connectGmail = connectGmail;
-        window.startThreadMonitoring = startThreadMonitoring;
-        window.stopThreadMonitoring = stopThreadMonitoring;
-        window.clearAllData = clearAllData;
-
-        console.log('AI Legal Assistant JavaScript loaded successfully');
-    </script>
-                
