@@ -1080,59 +1080,139 @@
         const API_BASE = window.location.origin;
 
         // Markdown renderer configuration
-        marked.setOptions({
-            breaks: true,
-            gfm: true,
-            sanitize: false
-        });
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                sanitize: false
+            });
+        }
 
-        // Initialize app
-        document.addEventListener('DOMContentLoaded', function() {
-            checkAuth();
-            setupEventListeners();
-        });
-
-        function checkAuth() {
-            const stored = localStorage.getItem('aiAssistantUser');
-            if (stored) {
-                currentUser = JSON.parse(stored);
-                showMainApp();
-            }
+        // ===== AUTHENTICATION FUNCTIONS (FIXED) =====
+        
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
         }
 
         function handleAuth(event) {
             event.preventDefault();
             
-            const name = document.getElementById('userName').value;
-            const email = document.getElementById('userEmail').value;
-            const org = document.getElementById('userOrg').value;
+            console.log('🔐 Authentication form submitted');
             
-            currentUser = { name, email, org };
-            localStorage.setItem('aiAssistantUser', JSON.stringify(currentUser));
-            
-            showMainApp();
+            try {
+                const nameInput = document.getElementById('userName');
+                const emailInput = document.getElementById('userEmail');
+                const orgInput = document.getElementById('userOrg');
+                
+                if (!nameInput || !emailInput || !orgInput) {
+                    console.error('Form inputs not found');
+                    showAlert('Form error. Please refresh the page.', 'error');
+                    return;
+                }
+                
+                const name = nameInput.value.trim();
+                const email = emailInput.value.trim();
+                const org = orgInput.value.trim();
+                
+                console.log('Form values:', { name, email, org });
+                
+                // Validation
+                if (!name || !email || !org) {
+                    showAlert('Please fill in all fields', 'error');
+                    return;
+                }
+                
+                if (!isValidEmail(email)) {
+                    showAlert('Please enter a valid email address', 'error');
+                    return;
+                }
+                
+                // Save user data
+                currentUser = { name, email, org, loginTime: new Date().toISOString() };
+                localStorage.setItem('aiAssistantUser', JSON.stringify(currentUser));
+                console.log('✅ User data saved successfully');
+                
+                showMainApp();
+                
+            } catch (error) {
+                console.error('❌ Authentication error:', error);
+                showAlert('Authentication failed. Please try again.', 'error');
+            }
         }
 
         function showMainApp() {
-            document.getElementById('authSection').style.display = 'none';
-            document.getElementById('mainApp').style.display = 'block';
+            console.log('🚀 Showing main application');
             
-            // Update header
-            const userInfo = document.getElementById('userInfo');
-            const userNameDisplay = document.getElementById('userNameDisplay');
-            const userAvatar = document.getElementById('userAvatar');
-            
-            if (currentUser && currentUser.name && userNameDisplay && userAvatar) {
-                userInfo.style.display = 'flex';
-                userNameDisplay.textContent = currentUser.name;
-                userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+            try {
+                const authSection = document.getElementById('authSection');
+                const mainApp = document.getElementById('mainApp');
+                const userInfo = document.getElementById('userInfo');
+                const userNameDisplay = document.getElementById('userNameDisplay');
+                const userAvatar = document.getElementById('userAvatar');
+                
+                if (!authSection || !mainApp) {
+                    console.error('Required elements not found');
+                    showAlert('Application error. Please refresh the page.', 'error');
+                    return;
+                }
+                
+                // Hide auth section
+                authSection.style.display = 'none';
+                
+                // Show main app
+                mainApp.style.display = 'block';
+                
+                // Update header
+                if (currentUser && currentUser.name && userInfo && userNameDisplay && userAvatar) {
+                    userInfo.style.display = 'flex';
+                    userNameDisplay.textContent = currentUser.name;
+                    userAvatar.textContent = currentUser.name.charAt(0).toUpperCase();
+                    console.log('Header updated successfully');
+                }
+                
+                isAuthenticated = true;
+                
+                // Initialize the app
+                loadClients();
+                showAlert(`Welcome ${currentUser?.name || 'User'}! Ready to analyze legal documents.`, 'success');
+                console.log('✅ Application initialization completed');
+                
+            } catch (error) {
+                console.error('❌ Error showing main app:', error);
+                showAlert('Application error. Please refresh the page.', 'error');
             }
-            
-            isAuthenticated = true;
-            loadClients();
-            
-            showAlert(`Welcome ${currentUser?.name || 'User'}! Ready to analyze legal documents.`, 'success');
         }
+
+        function checkAuth() {
+            console.log('🔍 Checking authentication status');
+            
+            try {
+                const stored = localStorage.getItem('aiAssistantUser');
+                if (stored) {
+                    currentUser = JSON.parse(stored);
+                    console.log('Found stored user:', currentUser.name);
+                    showMainApp();
+                } else {
+                    console.log('No stored user found');
+                }
+            } catch (error) {
+                console.error('Error checking auth:', error);
+                localStorage.removeItem('aiAssistantUser');
+            }
+        }
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 DOM Content Loaded');
+            
+            // Small delay to ensure everything is rendered
+            setTimeout(() => {
+                checkAuth();
+                setupEventListeners();
+                console.log('🎉 Application ready');
+            }, 100);
+        });
 
         function logout() {
             localStorage.removeItem('aiAssistantUser');
