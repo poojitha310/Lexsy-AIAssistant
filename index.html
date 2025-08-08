@@ -836,31 +836,364 @@
         </div>
     </header>
 
-    <!-- Authentication Section -->
-    <div id="authSection" class="auth-section">
-        <div class="auth-header">
-            <h2>Welcome to AI Legal Assistant</h2>
-            <p>Professional document and email analysis platform</p>
-        </div>
-        <form class="auth-form" onsubmit="handleAuth(event)">
-            <div class="form-group">
-                <label class="form-label">Full Name</label>
-                <input type="text" class="form-input" id="userName" placeholder="Enter your full name" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Email Address</label>
-                <input type="email" class="form-input" id="userEmail" placeholder="your@company.com" required>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Organization</label>
-                <input type="text" class="form-input" id="userOrg" placeholder="Law firm or company name" required>
-            </div>
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-sign-in-alt"></i>
-                Access Platform
-            </button>
-        </form>
+   <!-- REPLACE your entire auth section with this complete working version -->
+
+<!-- Authentication Section -->
+<div id="authSection" class="auth-section">
+    <div class="auth-header">
+        <h2>Welcome to AI Legal Assistant</h2>
+        <p>Professional document and email analysis platform</p>
     </div>
+    
+    <form class="auth-form" id="authForm">
+        <div class="form-group">
+            <label class="form-label" for="userName">Full Name</label>
+            <input 
+                type="text" 
+                class="form-input" 
+                id="userName" 
+                name="userName" 
+                placeholder="Enter your full name" 
+                required 
+                autocomplete="name">
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="userEmail">Email Address</label>
+            <input 
+                type="email" 
+                class="form-input" 
+                id="userEmail" 
+                name="userEmail" 
+                placeholder="your@company.com" 
+                required 
+                autocomplete="email">
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="userOrg">Organization</label>
+            <input 
+                type="text" 
+                class="form-input" 
+                id="userOrg" 
+                name="userOrg" 
+                placeholder="Law firm or company name" 
+                required 
+                autocomplete="organization">
+        </div>
+        <button type="submit" class="btn btn-primary" id="loginButton">
+            <i class="fas fa-sign-in-alt"></i>
+            Access Platform
+        </button>
+    </form>
+    
+    <!-- Debug panel (hidden by default) -->
+    <div id="debugPanel" style="display: none; margin-top: 1rem; padding: 1rem; background: #f0f8ff; border: 1px solid #ccc; border-radius: 8px; font-size: 0.85rem;">
+        <h4>Debug Information</h4>
+        <div id="debugOutput">Ready for testing...</div>
+        <button onclick="runDebugTest()" style="margin-top: 0.5rem; padding: 0.5rem 1rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            Run Debug Test
+        </button>
+    </div>
+</div>
+
+<script>
+// Global variables
+window.currentUser = null;
+window.isAuthenticated = false;
+window.currentClientId = null;
+window.availableClients = [];
+window.API_BASE = window.location.origin;
+
+// Debug function
+function debugLog(message) {
+    console.log('🔧 AUTH DEBUG:', message);
+    const debugOutput = document.getElementById('debugOutput');
+    if (debugOutput) {
+        debugOutput.innerHTML += '<br>' + new Date().toLocaleTimeString() + ': ' + message;
+    }
+}
+
+// Show debug panel
+function showDebugPanel() {
+    document.getElementById('debugPanel').style.display = 'block';
+}
+
+// Run comprehensive debug test
+function runDebugTest() {
+    debugLog('=== Running Debug Test ===');
+    
+    // Test 1: Check all required elements
+    const elements = {
+        authSection: document.getElementById('authSection'),
+        mainApp: document.getElementById('mainApp'),
+        userName: document.getElementById('userName'),
+        userEmail: document.getElementById('userEmail'),
+        userOrg: document.getElementById('userOrg'),
+        userInfo: document.getElementById('userInfo'),
+        userNameDisplay: document.getElementById('userNameDisplay'),
+        userAvatar: document.getElementById('userAvatar')
+    };
+    
+    debugLog('Element check:');
+    for (const [name, element] of Object.entries(elements)) {
+        debugLog(`  ${name}: ${element ? '✅ Found' : '❌ Missing'}`);
+    }
+    
+    // Test 2: Check localStorage
+    try {
+        localStorage.setItem('test_item', 'test_value');
+        const retrieved = localStorage.getItem('test_item');
+        localStorage.removeItem('test_item');
+        debugLog(`localStorage: ${retrieved === 'test_value' ? '✅ Working' : '❌ Failed'}`);
+    } catch (e) {
+        debugLog(`localStorage: ❌ Error - ${e.message}`);
+    }
+    
+    // Test 3: Check form values
+    if (elements.userName && elements.userEmail && elements.userOrg) {
+        debugLog('Current form values:');
+        debugLog(`  Name: "${elements.userName.value}"`);
+        debugLog(`  Email: "${elements.userEmail.value}"`);
+        debugLog(`  Org: "${elements.userOrg.value}"`);
+    }
+    
+    debugLog('=== Debug Test Complete ===');
+}
+
+// Main authentication function
+function performLogin(event) {
+    if (event) {
+        event.preventDefault();
+    }
+    
+    debugLog('🔐 Login process started');
+    showDebugPanel();
+    
+    try {
+        // Get form elements
+        const nameInput = document.getElementById('userName');
+        const emailInput = document.getElementById('userEmail');
+        const orgInput = document.getElementById('userOrg');
+        
+        if (!nameInput || !emailInput || !orgInput) {
+            throw new Error('Form elements not found');
+        }
+        
+        // Get and validate values
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
+        const org = orgInput.value.trim();
+        
+        debugLog(`Form values: name="${name}", email="${email}", org="${org}"`);
+        
+        if (!name || !email || !org) {
+            throw new Error('Please fill in all fields');
+        }
+        
+        if (!email.includes('@') || !email.includes('.')) {
+            throw new Error('Please enter a valid email address');
+        }
+        
+        if (name.length < 2) {
+            throw new Error('Name must be at least 2 characters');
+        }
+        
+        // Create user object
+        window.currentUser = {
+            name: name,
+            email: email,
+            org: org,
+            loginTime: new Date().toISOString()
+        };
+        
+        // Save to localStorage
+        localStorage.setItem('aiAssistantUser', JSON.stringify(window.currentUser));
+        debugLog('✅ User data saved to localStorage');
+        
+        // Verify save
+        const saved = localStorage.getItem('aiAssistantUser');
+        if (!saved) {
+            throw new Error('Failed to save user data');
+        }
+        
+        window.isAuthenticated = true;
+        debugLog('✅ Authentication successful');
+        
+        // Show main application
+        showMainApplication();
+        
+    } catch (error) {
+        debugLog(`❌ Login error: ${error.message}`);
+        alert(`Login failed: ${error.message}`);
+    }
+}
+
+// Show main application
+function showMainApplication() {
+    debugLog('🚀 Showing main application');
+    
+    try {
+        const authSection = document.getElementById('authSection');
+        const mainApp = document.getElementById('mainApp');
+        
+        if (!authSection || !mainApp) {
+            throw new Error('Required application sections not found');
+        }
+        
+        // Hide auth section
+        authSection.style.display = 'none';
+        debugLog('✅ Auth section hidden');
+        
+        // Show main app
+        mainApp.style.display = 'block';
+        debugLog('✅ Main app displayed');
+        
+        // Update header
+        updateUserHeader();
+        
+        // Initialize application
+        setTimeout(() => {
+            initializeApplication();
+        }, 300);
+        
+    } catch (error) {
+        debugLog(`❌ Error showing main app: ${error.message}`);
+        alert(`Failed to show main application: ${error.message}`);
+    }
+}
+
+// Update user header
+function updateUserHeader() {
+    try {
+        const userInfo = document.getElementById('userInfo');
+        const userNameDisplay = document.getElementById('userNameDisplay');
+        const userAvatar = document.getElementById('userAvatar');
+        
+        if (userInfo && userNameDisplay && userAvatar && window.currentUser) {
+            userInfo.style.display = 'flex';
+            userNameDisplay.textContent = window.currentUser.name;
+            userAvatar.textContent = window.currentUser.name.charAt(0).toUpperCase();
+            debugLog('✅ Header updated with user info');
+        } else {
+            debugLog('⚠️ Could not update header - missing elements or user data');
+        }
+    } catch (error) {
+        debugLog(`❌ Error updating header: ${error.message}`);
+    }
+}
+
+// Initialize application
+function initializeApplication() {
+    try {
+        debugLog('🔧 Initializing application...');
+        
+        // Show welcome message
+        if (typeof showAlert === 'function') {
+            showAlert(`Welcome ${window.currentUser.name}! Ready to analyze legal documents.`, 'success');
+        }
+        
+        // Load clients if function exists
+        if (typeof loadClients === 'function') {
+            loadClients();
+            debugLog('✅ loadClients() called');
+        } else {
+            debugLog('⚠️ loadClients() function not found');
+        }
+        
+        debugLog('✅ Application initialization complete');
+        
+    } catch (error) {
+        debugLog(`❌ Error initializing app: ${error.message}`);
+    }
+}
+
+// Check for existing authentication
+function checkExistingAuth() {
+    debugLog('🔍 Checking for existing authentication');
+    
+    try {
+        const stored = localStorage.getItem('aiAssistantUser');
+        if (stored) {
+            window.currentUser = JSON.parse(stored);
+            window.isAuthenticated = true;
+            debugLog(`✅ Found existing user: ${window.currentUser.name}`);
+            
+            setTimeout(() => {
+                showMainApplication();
+            }, 100);
+        } else {
+            debugLog('ℹ️ No existing authentication found');
+        }
+    } catch (error) {
+        debugLog(`❌ Error checking existing auth: ${error.message}`);
+        localStorage.removeItem('aiAssistantUser'); // Clear corrupted data
+    }
+}
+
+// Logout function
+function performLogout() {
+    debugLog('👋 Logging out user');
+    
+    localStorage.removeItem('aiAssistantUser');
+    window.currentUser = null;
+    window.isAuthenticated = false;
+    window.currentClientId = null;
+    window.availableClients = [];
+    
+    const authSection = document.getElementById('authSection');
+    const mainApp = document.getElementById('mainApp');
+    const userInfo = document.getElementById('userInfo');
+    
+    if (authSection) authSection.style.display = 'block';
+    if (mainApp) mainApp.style.display = 'none';
+    if (userInfo) userInfo.style.display = 'none';
+    
+    // Clear form
+    const form = document.getElementById('authForm');
+    if (form) form.reset();
+    
+    if (typeof showAlert === 'function') {
+        showAlert('Logged out successfully', 'success');
+    }
+    
+    debugLog('✅ Logout complete');
+}
+
+// Setup event listeners
+function setupAuthenticationListeners() {
+    debugLog('🎧 Setting up authentication listeners');
+    
+    const authForm = document.getElementById('authForm');
+    if (authForm) {
+        authForm.addEventListener('submit', performLogin);
+        debugLog('✅ Form submit listener added');
+    }
+    
+    // Override global functions
+    window.handleAuth = performLogin;
+    window.logout = performLogout;
+    
+    debugLog('✅ Global functions set');
+}
+
+// Initialize everything when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    debugLog('📄 DOM loaded - initializing authentication system');
+    
+    setTimeout(() => {
+        setupAuthenticationListeners();
+        checkExistingAuth();
+        debugLog('🎉 Authentication system ready');
+    }, 100);
+});
+
+// Make functions globally available
+window.performLogin = performLogin;
+window.performLogout = performLogout;
+window.runDebugTest = runDebugTest;
+window.showDebugPanel = showDebugPanel;
+
+debugLog('✅ Authentication script loaded');
+</script>
 
     <!-- Main Application -->
     <div id="mainApp" class="container" style="display: none;">
