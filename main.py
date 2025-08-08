@@ -9,6 +9,11 @@ import os
 import json
 import hashlib
 import uuid
+import time
+import json
+from datetime import datetime
+from models.document import Document
+from models.conversation import Conversation
 from datetime import datetime, timedelta
 from pathlib import Path
 import time
@@ -1715,6 +1720,30 @@ def get_client_name(client_id: int) -> str:
     except:
         return f"Client {client_id}"
 
+# ADD THIS HELPER FUNCTION anywhere in your main.py (after imports, before endpoints)
+
+def get_client_name(client_id: int) -> str:
+    """Helper function to get client name"""
+    try:
+        if not FULL_FEATURES:
+            if client_id == 1:
+                return "Lexsy, Inc."
+            elif client_id == 2:
+                return "TechCorp LLC"
+            return f"Client {client_id}"
+        
+        db = SessionLocal()
+        client = db.query(Client).filter(Client.id == client_id).first()
+        db.close()
+        return client.name if client else f"Client {client_id}"
+    except:
+        return f"Client {client_id}"
+
+# ======================
+# REPLACE THE EXISTING CHAT ENDPOINT
+# Find @app.post("/api/chat/{client_id}/ask") and REPLACE THE ENTIRE FUNCTION with this:
+# ======================
+
 @app.post("/api/chat/{client_id}/ask")
 async def ask_question(
     client_id: int,
@@ -1825,8 +1854,6 @@ async def ask_question(
             tokens_used=response["tokens_used"]
         )
         
-        db.add(conversation)
-        db.commit()
         db.refresh(conversation)
         
         db.close()
@@ -1846,6 +1873,224 @@ async def ask_question(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chat request failed: {str(e)}")
+
+# ======================
+# REPLACE THE EXISTING DEMO INITIALIZATION ENDPOINT
+# Find @app.post("/api/demo/initialize-full") and REPLACE THE ENTIRE FUNCTION with this:
+# ======================
+
+@app.post("/api/demo/initialize-full")
+async def initialize_full_demo():
+    """Initialize complete demo with sample clients and data"""
+    try:
+        results = {
+            "clients_created": [],
+            "sample_data_loaded": {}
+        }
+        
+        if FULL_FEATURES:
+            db = SessionLocal()
+            
+            # Create demo clients
+            demo_clients = [
+                {
+                    "name": "Lexsy, Inc.",
+                    "email": "legal@lexsy.com", 
+                    "company": "Lexsy, Inc.",
+                    "description": "AI-powered legal technology startup focusing on equity grants and advisor agreements"
+                },
+                {
+                    "name": "TechCorp LLC",
+                    "email": "counsel@techcorp.com",
+                    "company": "TechCorp LLC", 
+                    "description": "Enterprise software company focusing on employment and vendor contracts"
+                }
+            ]
+            
+            for client_data in demo_clients:
+                existing = db.query(Client).filter(Client.email == client_data["email"]).first()
+                if not existing:
+                    client = Client(**client_data)
+                    db.add(client)
+                    db.commit()
+                    db.refresh(client)
+                    results["clients_created"].append(client.to_dict())
+                else:
+                    results["clients_created"].append(existing.to_dict())
+            
+            db.close()
+            
+            # Load sample data for Lexsy (first client)
+            if results["clients_created"]:
+                lexsy_client = results["clients_created"][0]
+                try:
+                    # Load sample documents
+                    doc_result = await upload_sample_documents(lexsy_client["id"])
+                    # Load sample emails  
+                    email_result = await ingest_sample_emails(lexsy_client["id"])
+                    
+                    # IMPORTANT: Fix vector store for the client
+                    if FULL_FEATURES:
+                        try:
+                            await fix_vector_metadata(lexsy_client["id"])
+                        except:
+                            pass
+                    
+                    results["sample_data_loaded"] = {
+                        "documents": doc_result.get("success", False),
+                        "emails": email_result.get("success", False),
+                        "documents_count": len(doc_result.get("documents", [])),
+                        "emails_count": email_result.get("emails_processed", 0)
+                    }
+                except Exception as e:
+                    print(f"Error loading sample data: {e}")
+        else:
+            # Demo mode
+            results["clients_created"] = [
+                {"id": 1, "name": "Lexsy, Inc.", "email": "legal@lexsy.com"},
+                {"id": 2, "name": "TechCorp LLC", "email": "counsel@techcorp.com"}
+            ]
+            results["sample_data_loaded"] = {
+                "documents": True,
+                "emails": True,
+                "documents_count": 3,
+                "emails_count": 6
+            }
+        
+        return {
+            "success": True,
+            "message": "Full demo initialized successfully!",
+            "results": results
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Demo initialization failed"
+        }
+
+# ======================
+# ADD THESE NEW DEBUG ENDPOINTS (add anywhere after existing endpoints)
+# ======================
+
+@app.post("/api/debug/reprocess-all-client-documents/{client_id}")
+async def reprocess_all_client_documents(client_id: int):
+    """Reprocess all documents for a client to fix vector store issues"""
+    try:
+        if not FULL_FEATURES:
+            return {"error": "Full features not available"}
+        
+        db = SessionLocal()
+        
+        # Get all documents for this client
+        documents = db.query(Document).filter(Document.client_id == client_id).all()
+        
+        if not documents:
+            db.close()
+            return {"error": "No documents found for client"}
+        
+        # Initialize services
+        from services.vector_service import VectorService
+        vector_service = VectorService()
+        
+        results = []
+        
+        for document in documents:
+            result = {
+                "document_id": document.id,
+                "filename": document.original_filename,
+                "status": "processing"
+            }
+            
+            try:
+                # Delete existing vector chunks (if any)
+                vector_service.delete_document_chunks(client_id, document.id)
+                
+                # Clear chunk_ids in database
+                document.chunk_ids = None
+                document.processing_status = "processing"
+                db.commit()
+                
+                # Only process if we have extracted text
+                if document.extracted_text and len(document.extracted_text.strip()) > 0:
+                    # Add to vector store with fixed metadata
+                    chunk_ids = vector_service.add_document_to_vector_store(
+                        client_id=client_id,
+                        document_id=document.id,
+                        text=document.extracted_text,
+                        metadata={
+                            "filename": document.original_filename,
+                            "file_type": document.file_type,
+                            "created_at": document.created_at.isoformat() if document.created_at else datetime.now().isoformat()
+                        }
+                    )
+                    
+                    if chunk_ids:
+                        document.chunk_ids = json.dumps(chunk_ids)
+                        document.processing_status = "completed"
+                        result["status"] = "success"
+                        result["chunks_created"] = len(chunk_ids)
+                    else:
+                        document.processing_status = "failed"
+                        result["status"] = "failed"
+                        result["error"] = "Failed to create vector chunks"
+                else:
+                    document.processing_status = "failed"
+                    result["status"] = "failed"
+                    result["error"] = "No extracted text available"
+                
+                db.commit()
+                
+            except Exception as e:
+                document.processing_status = "failed"
+                db.commit()
+                result["status"] = "error"
+                result["error"] = str(e)
+            
+            results.append(result)
+        
+        db.close()
+        
+        success_count = len([r for r in results if r["status"] == "success"])
+        
+        return {
+            "success": True,
+            "total_documents": len(documents),
+            "successful_reprocessed": success_count,
+            "results": results
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/debug/fix-vector-metadata/{client_id}")
+async def fix_vector_metadata(client_id: int):
+    """Fix vector store metadata format issues"""
+    try:
+        if not FULL_FEATURES:
+            return {"error": "Full features not available"}
+        
+        from services.vector_service import VectorService
+        vector_service = VectorService()
+        
+        # Reset the entire vector store for this client
+        reset_success = vector_service.reset_client_data(client_id)
+        
+        if reset_success:
+            # Now reprocess all documents
+            reprocess_result = await reprocess_all_client_documents(client_id)
+            return {
+                "vector_reset": True,
+                "reprocess_result": reprocess_result
+            }
+        else:
+            return {"error": "Failed to reset vector data"}
+            
+    except Exception as e:
+        return {"error": str(e)}
+
+
 
 # Also add this endpoint to initialize demo data properly
 @app.post("/api/demo/initialize-full")
